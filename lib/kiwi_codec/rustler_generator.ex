@@ -110,13 +110,16 @@ defmodule KiwiCodec.RustlerGenerator do
   end
 
   defp definition_code(%Definition{kind: :message} = definition, module_prefix, definition_map) do
-    defaults = Enum.map(definition.fields, &message_field_default/1)
-    fields = Enum.map(definition.fields, &message_field_arm(&1, definition_map))
+    fields =
+      definition.fields |> Enum.with_index() |> Enum.map(&message_field_arm(&1, definition_map))
 
     """
     fn #{decoder_name(definition.name)}_from_decoder<'a>(env: Env<'a>, decoder: &mut Decoder<'_>) -> NifResult<Term<'a>> {
-        let mut term = rustler::types::elixir_struct::make_ex_struct(env, #{rust_string(module_name(module_prefix, definition.name))})?;
-    #{indent(defaults, 4)}
+        static MODULE_ATOM: OnceLock<Atom> = OnceLock::new();
+        static FIELD_ATOMS: OnceLock<Vec<Atom>> = OnceLock::new();
+        let module_atom = cached_atom(env, &MODULE_ATOM, #{rust_string(module_name(module_prefix, definition.name))});
+        let field_atoms = cached_atoms(env, &FIELD_ATOMS, &[#{field_names(definition.fields)}]);
+        let mut values = default_values(env, field_atoms.len());
         loop {
             match decoder.read_var_uint()? {
                 0 => break,
@@ -124,17 +127,13 @@ defmodule KiwiCodec.RustlerGenerator do
                 field => return Err(Error::Term(Box::new(format!("unknown field {} while decoding #{definition.name}", field)))),
             }
         }
-        Ok(term)
+        make_struct(env, module_atom, field_atoms, &values)
     }
     """
   end
 
   defp enum_arm(field) do
     "#{field.value} => Ok(Atom::from_str(env, #{rust_string(field_name(field.name))})?.encode(env)),"
-  end
-
-  defp message_field_default(field) do
-    "term = term.map_put(Atom::from_str(env, #{rust_string(field_name(field.name))})?, rustler::types::atom::nil())?;"
   end
 
   defp struct_field_decode(field, definition_map) do
@@ -147,14 +146,13 @@ defmodule KiwiCodec.RustlerGenerator do
     """
   end
 
-  defp message_field_arm(field, definition_map) do
-    field_name = field_name(field.name)
+  defp message_field_arm({field, index}, definition_map) do
     value = field_value(field, definition_map)
 
     """
     #{field.value} => {
         let value = #{value};
-        term = term.map_put(Atom::from_str(env, #{rust_string(field_name)})?, value)?;
+        values[#{index}] = value.encode(env);
     }
     """
   end
@@ -200,6 +198,10 @@ defmodule KiwiCodec.RustlerGenerator do
   end
 
   defp field_name(name), do: Macro.underscore(name)
+
+  defp field_names(fields) do
+    Enum.map_join(fields, ", ", fn field -> field.name |> field_name() |> rust_string() end)
+  end
 
   defp rust_ident(name) do
     name
