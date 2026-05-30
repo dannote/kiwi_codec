@@ -59,16 +59,18 @@ defmodule KiwiCodec.Decoder do
 
   defp do_decode_field_value(binary, %FieldProps{repeated?: true} = field) do
     {length, rest} = Varint.decode_uint(binary)
-
-    Enum.reduce(1..length//1, {[], rest}, fn _index, {values, tail} ->
-      {value, next} = decode_scalar(field.type, tail)
-      {[value | values], next}
-    end)
-    |> then(fn {values, tail} -> {Enum.reverse(values), tail} end)
+    decode_repeated(length, field.type, rest, [])
   end
 
   defp do_decode_field_value(binary, %FieldProps{} = field) do
     decode_scalar(field.type, binary)
+  end
+
+  defp decode_repeated(0, _type, binary, acc), do: {Enum.reverse(acc), binary}
+
+  defp decode_repeated(count, type, binary, acc) do
+    {value, rest} = decode_scalar(type, binary)
+    decode_repeated(count - 1, type, rest, [value | acc])
   end
 
   defp decode_scalar({:enum, module}, binary) do
