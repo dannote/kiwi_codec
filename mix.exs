@@ -61,7 +61,7 @@ defmodule KiwiCodec.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ["lib", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE*"]
+      files: ["lib", "priv", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE*"]
     ]
   end
 
