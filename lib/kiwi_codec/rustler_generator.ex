@@ -26,9 +26,7 @@ defmodule KiwiCodec.RustlerGenerator do
   @doc """
   Renders a Rust template with generated Kiwi decoder replacements.
 
-  Generates native decoders for enums and structs. Message generation is left
-  for the next slice because message defaults/unknown-field behavior need a bit
-  more design.
+  Generates native decoders for enums, structs, and messages.
   """
   @spec render!(Schema.t(), keyword()) :: Path.t()
   def render!(%Schema{} = schema, opts) do
@@ -111,7 +109,23 @@ defmodule KiwiCodec.RustlerGenerator do
     """
   end
 
-  defp definition_code(_definition, _module_prefix, _definition_map), do: nil
+  defp definition_code(%Definition{kind: :message} = definition, module_prefix, definition_map) do
+    fields = Enum.map(definition.fields, &message_field_arm(&1, definition_map))
+
+    """
+    fn #{decoder_name(definition.name)}_from_decoder<'a>(env: Env<'a>, decoder: &mut Decoder<'_>) -> NifResult<Term<'a>> {
+        let mut term = rustler::types::elixir_struct::make_ex_struct(env, #{rust_string(module_name(module_prefix, definition.name))})?;
+        loop {
+            match decoder.read_var_uint()? {
+                0 => break,
+    #{indent(fields, 12)}
+                field => return Err(Error::Term(Box::new(format!("unknown field {} while decoding #{definition.name}", field)))),
+            }
+        }
+        Ok(term)
+    }
+    """
+  end
 
   defp enum_arm(field) do
     "#{field.value} => Ok(Atom::from_str(env, #{rust_string(field_name(field.name))})?.encode(env)),"
@@ -125,6 +139,22 @@ defmodule KiwiCodec.RustlerGenerator do
     let value = #{value};
     term = term.map_put(Atom::from_str(env, #{rust_string(field_name)})?, value)?;
     """
+  end
+
+  defp message_field_arm(field, definition_map) do
+    field_name = field_name(field.name)
+    value = field_value(field, definition_map)
+
+    """
+    #{field.value} => {
+        let value = #{value};
+        term = term.map_put(Atom::from_str(env, #{rust_string(field_name)})?, value)?;
+    }
+    """
+  end
+
+  defp field_value(%{array?: true, type: "byte"}, _definition_map) do
+    "decoder.read_byte_array(env)?"
   end
 
   defp field_value(%{array?: true} = field, definition_map) do

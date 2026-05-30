@@ -17,6 +17,12 @@ defmodule KiwiCodec.RustlerGeneratorTest do
         Kind kind;
         Point position;
       }
+
+      message Image {
+        byte[] hash = 1;
+        string name = 2;
+        uint dataBlob = 3;
+      }
       """)
 
     dir =
@@ -41,8 +47,8 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     """)
 
     KiwiCodec.RustlerGenerator.render!(schema,
-      definitions: ["Node"],
-      entrypoints: [decode_node: "Node"],
+      definitions: ["Node", "Image"],
+      entrypoints: [decode_node: "Node", decode_image: "Image"],
       module_prefix: "Example.Schema",
       template: template,
       out: out
@@ -54,8 +60,12 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     assert generated =~ "fn decode_point_from_decoder"
     assert generated =~ "fn decode_kind_from_decoder"
     assert generated =~ "pub fn decode_node"
+    assert generated =~ "pub fn decode_image"
     assert generated =~ ~s("Elixir.Example.Schema.Node")
+    assert generated =~ ~s("Elixir.Example.Schema.Image")
     assert generated =~ "decoder.read_var_float(env)?"
+    assert generated =~ "decoder.read_byte_array(env)?"
+    assert generated =~ "match decoder.read_var_uint()?"
     refute generated =~ "kiwi_codegen"
   end
 end
