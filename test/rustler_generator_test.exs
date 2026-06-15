@@ -77,4 +77,41 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     assert generated =~ "match decoder.read_var_uint()?"
     refute generated =~ "__rq_"
   end
+
+  test "passes render options through to RustQ" do
+    schema =
+      KiwiCodec.parse_schema!("""
+      struct Point {
+        float x;
+      }
+      """)
+
+    dir =
+      Path.join(
+        System.tmp_dir!(),
+        "kiwi-rustler-generator-options-test-#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf(dir) end)
+
+    template = Path.join(dir, "template.rs")
+
+    File.write!(template, """
+    use rustler::{Env, NifResult, Term};
+    use rustler::types::atom::Atom;
+    use crate::runtime::Decoder;
+    __rq_definitions!();
+    """)
+
+    generated =
+      KiwiCodec.RustlerGenerator.render_source!(schema,
+        definitions: ["Point"],
+        module_prefix: "Example.Schema",
+        template: template,
+        rustfmt: true
+      )
+
+    assert generated =~ "fn decode_point_from_decoder<'a>("
+  end
 end

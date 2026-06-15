@@ -33,7 +33,7 @@ defmodule KiwiCodec.RustlerGenerator do
     template = Keyword.fetch!(opts, :template)
     out = Keyword.fetch!(opts, :out)
 
-    KiwiCodec.RustTemplate.render!(template, out, replacements(schema, opts))
+    KiwiCodec.RustTemplate.render!(template, out, replacements(schema, opts), opts)
   end
 
   @doc """
@@ -45,7 +45,7 @@ defmodule KiwiCodec.RustlerGenerator do
   def render_source!(%Schema{} = schema, opts) do
     template = Keyword.fetch!(opts, :template)
 
-    KiwiCodec.RustTemplate.render_source!(template, replacements(schema, opts))
+    KiwiCodec.RustTemplate.render_source!(template, replacements(schema, opts), opts)
   end
 
   defp replacements(%Schema{} = schema, opts) do
