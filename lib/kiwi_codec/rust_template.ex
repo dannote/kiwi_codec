@@ -29,7 +29,10 @@ defmodule KiwiCodec.RustTemplate do
   def render_source!(template, replacements, opts \\ []) do
     template
     |> File.read!()
-    |> RustQ.render!(Keyword.get(opts, :filename, template), splice: splices(replacements))
+    |> RustQ.render!(Keyword.get(opts, :filename, template),
+      include_dir: Keyword.get(opts, :include_dir, Path.dirname(template)),
+      splice: splices(replacements)
+    )
   end
 
   defp splices(replacements) do
