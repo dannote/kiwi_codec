@@ -1,3 +1,45 @@
+defmodule KiwiCodec.RustlerGenerator.Rusty do
+  @moduledoc false
+
+  defmacro enum_decoder(name, variants) do
+    {name, _binding} = Code.eval_quoted(name, [], __CALLER__)
+    {variants, _binding} = Code.eval_quoted(variants, [], __CALLER__)
+
+    clauses =
+      variants
+      |> Enum.flat_map(fn {value, static_name, atom_name} ->
+        quote do
+          unquote(value) ->
+            {:ok, cached_atom(env, ref(unquote(static_name)), unquote(atom_name)).encode(env)}
+        end
+      end)
+      |> Kernel.++(
+        quote do
+          value -> {:ok, value.encode(env)}
+        end
+      )
+
+    quote do
+      @spec unquote(name)(
+              R.path(:Env, R.lifetime(:a)),
+              R.mut_ref(R.path(:Decoder, R.lifetime(:_)))
+            ) ::
+              R.nif_result(R.path(:Term, R.lifetime(:a)))
+      defrust unquote(name)(env, decoder) do
+        case decoder.read_var_uint() do
+          {:ok, raw} ->
+            case cast(raw, :i64) do
+              (unquote_splicing(clauses))
+            end
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      end
+    end
+  end
+end
+
 defmodule KiwiCodec.RustlerGenerator do
   @moduledoc """
   Generates Rustler decoder code from Kiwi schemas for RustQ manifests.
@@ -12,7 +54,7 @@ defmodule KiwiCodec.RustlerGenerator do
   alias RustQ.Rust
   alias RustQ.Rust.AST
   alias RustQ.Rust.AST.Builder, as: A
-  alias RustQ.Rust.AST.PatternBuilder, as: P
+  alias RustQ.Rust.AST.Render
 
   require A
 
@@ -116,7 +158,7 @@ defmodule KiwiCodec.RustlerGenerator do
         atom_static(enum_variant_atom_static(definition.name, index))
       end)
 
-    variant_statics ++ [Rust.ast_item(enum_decoder_ast(definition))]
+    variant_statics ++ [enum_decoder_item(definition)]
   end
 
   defp definition_items(%Definition{kind: :struct} = definition, module_prefix, definition_map) do
@@ -167,55 +209,47 @@ defmodule KiwiCodec.RustlerGenerator do
     )
   end
 
-  defp enum_decoder_ast(%Definition{} = definition) do
-    %AST.Function{
-      name: decoder_function_name(definition.name),
-      lifetime: :a,
-      args: decoder_args(),
-      returns: term_result_type(),
-      body: [
-        A.return(
-          A.match_expr(
-            A.cast(A.try(A.method(:decoder, :read_var_uint)), A.type_path(:i64)),
-            enum_arms(definition) ++ [unknown_enum_arm()]
-          )
-        )
-      ]
-    }
+  defp enum_decoder_item(%Definition{} = definition) do
+    module = generated_enum_module!(definition)
+    Enum.find(module.__rustq_asts__(), &(&1.name == decoder_function_name(definition.name)))
   end
 
-  defp enum_arms(%Definition{} = definition) do
-    definition.fields
-    |> Enum.with_index()
-    |> Enum.map(fn {field, index} ->
-      atom_static = enum_variant_atom_static(definition.name, index)
+  defp generated_enum_module!(%Definition{} = definition) do
+    module = Module.concat([KiwiCodec.RustlerGenerator.Generated, "Enum#{definition.name}"])
 
-      %AST.Arm{
-        pattern: P.lit(field.value),
-        body: [
-          A.return(
-            A.ok(
-              A.method(
-                A.call(:cached_atom, [
-                  :env,
-                  A.ref(atom_static),
-                  field.name |> field_name() |> A.lit()
-                ]),
-                :encode,
-                [:env]
-              )
-            )
+    if Code.ensure_loaded?(module) do
+      module
+    else
+      variants =
+        definition.fields
+        |> Enum.with_index()
+        |> Enum.map(fn {field, index} ->
+          {
+            field.value,
+            static_alias(enum_variant_atom_static(definition.name, index)),
+            field_name(field.name)
+          }
+        end)
+
+      name = decoder_function_name(definition.name)
+
+      Module.create(
+        module,
+        quote do
+          use RustQ.Meta
+          alias RustQ.Type, as: R
+          import KiwiCodec.RustlerGenerator.Rusty, only: [enum_decoder: 2]
+
+          enum_decoder(
+            unquote(name),
+            unquote(Macro.escape(variants))
           )
-        ]
-      }
-    end)
-  end
+        end,
+        Macro.Env.location(__ENV__)
+      )
 
-  defp unknown_enum_arm do
-    %AST.Arm{
-      pattern: P.var(:value),
-      body: [A.return(A.ok(A.method(:value, :encode, [:env])))]
-    }
+      module
+    end
   end
 
   defp struct_decoder_ast(%Definition{} = definition, module_prefix, definition_map) do
@@ -347,9 +381,8 @@ defmodule KiwiCodec.RustlerGenerator do
     RustQ.parse_fragment!(:item, code)
   end
 
-  defp fragment_code(fragment) do
-    RustQ.Rust.to_fragment(fragment)
-  end
+  defp fragment_code(%AST.Function{} = item), do: Render.render_item(item)
+  defp fragment_code(fragment), do: RustQ.Rust.to_fragment(fragment)
 
   defp decoder_name(name), do: "decode_#{rust_ident(name)}"
 
@@ -370,6 +403,8 @@ defmodule KiwiCodec.RustlerGenerator do
   defp module_atom_static(name), do: static_name(name, "MODULE_ATOM")
   defp struct_keys_static(name), do: static_name(name, "STRUCT_KEYS")
   defp enum_variant_atom_static(name, index), do: static_name(name, "ATOM_#{index}")
+
+  defp static_alias(name), do: {:__aliases__, [], [name]}
 
   defp static_name(name, suffix) do
     name
