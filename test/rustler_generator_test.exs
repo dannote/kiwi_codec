@@ -94,8 +94,8 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     assert generated =~ ~s("Elixir.Example.Schema.Node")
     assert generated =~ ~s("Elixir.Example.Schema.Image")
     assert generated =~ "match decoder.read_var_float(env)"
-    assert generated =~ "decoder.read_byte_array(env)?"
-    assert generated =~ "match decoder.read_var_uint()?"
+    assert generated =~ "match decoder.read_byte_array(env)"
+    assert generated =~ "match decoder.read_var_uint()"
     refute generated =~ "__rq_"
   end
 

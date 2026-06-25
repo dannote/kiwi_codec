@@ -29,6 +29,83 @@ defmodule KiwiCodec.RustlerGenerator.Rusty do
     end
   end
 
+  defmacro message_decoder(name, fields_name, module_static, keys_static, module_name, key_names) do
+    {name, _binding} = Code.eval_quoted(name, [], __CALLER__)
+    {fields_name, _binding} = Code.eval_quoted(fields_name, [], __CALLER__)
+    {module_static, _binding} = Code.eval_quoted(module_static, [], __CALLER__)
+    {keys_static, _binding} = Code.eval_quoted(keys_static, [], __CALLER__)
+    {module_name, _binding} = Code.eval_quoted(module_name, [], __CALLER__)
+    {key_names, _binding} = Code.eval_quoted(key_names, [], __CALLER__)
+    module_static = static_path(module_static)
+    keys_static = static_path(keys_static)
+
+    quote do
+      @spec unquote(name)(
+              R.path(:Env, R.lifetime(:a)),
+              R.mut_ref(R.path(:Decoder, R.lifetime(:_)))
+            ) ::
+              R.nif_result(R.path(:Term, R.lifetime(:a)))
+      defrust unquote(name)(env, decoder) do
+        module_atom = cached_atom(env, ref(unquote(module_static)), unquote(module_name))
+        keys = cached_struct_keys(env, ref(unquote(keys_static)), ref(unquote(key_names)))
+        values = default_values(module_atom, keys.len() - 1)
+        unquote(fields_name)(env, decoder, keys, values)
+      end
+    end
+  end
+
+  defmacro message_fields_decoder(name, fields) do
+    {name, _binding} = Code.eval_quoted(name, [], __CALLER__)
+    {fields, _binding} = Code.eval_quoted(fields, [], __CALLER__)
+
+    clauses =
+      fields
+      |> Enum.flat_map(fn {field_value, index, expr} ->
+        quote do
+          unquote(field_value) ->
+            case unquote(expr) do
+              {:ok, value} ->
+                assign!(index(values, unquote(index)), value.encode(env).as_c_arg())
+                unquote(name)(env, decoder, keys, values)
+
+              {:error, reason} ->
+                {:error, reason}
+            end
+        end
+      end)
+      |> Kernel.++(
+        quote do
+          _unknown -> {:error, badarg()}
+        end
+      )
+
+    quote do
+      @spec unquote(name)(
+              R.path(:Env, R.lifetime(:a)),
+              R.mut_ref(R.path(:Decoder, R.lifetime(:_))),
+              R.ref(R.vec(R.path({:rustler, :wrapper, :NIF_TERM}))),
+              R.vec(R.path({:rustler, :wrapper, :NIF_TERM}))
+            ) ::
+              R.nif_result(R.path(:Term, R.lifetime(:a)))
+      defrust unquote(name)(env, decoder, keys, values) do
+        values = values
+
+        case decoder.read_var_uint() do
+          {:ok, 0} ->
+            make_struct(env, keys, ref(values))
+
+          {:ok, field} ->
+            case field do
+              (unquote_splicing(clauses))
+            end
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      end
+    end
+  end
+
   defmacro entrypoint(nif_name, decoder_name) do
     {nif_name, _binding} = Code.eval_quoted(nif_name, [], __CALLER__)
     {decoder_name, _binding} = Code.eval_quoted(decoder_name, [], __CALLER__)
@@ -147,14 +224,9 @@ defmodule KiwiCodec.RustlerGenerator do
     defp primitive_decoder_expr(%{type: unquote(type)}) do
       unquote(Macro.escape(call))
     end
-
-    defp primitive_decoder_source(%{type: unquote(type)}) do
-      unquote("decoder.#{method}(#{Enum.map_join(args, ", ", &to_string/1)})")
-    end
   end
 
   defp primitive_decoder_expr(_field), do: nil
-  defp primitive_decoder_source(_field), do: nil
 
   @type entrypoint :: {atom() | String.t(), String.t()}
 
@@ -243,34 +315,13 @@ defmodule KiwiCodec.RustlerGenerator do
     ]
   end
 
-  defp definition_items(%Definition{} = definition, module_prefix, definition_map) do
-    definition
-    |> definition_code(module_prefix, definition_map)
-    |> rust_item_fragment()
-    |> List.wrap()
-  end
-
-  defp definition_code(%Definition{kind: :message} = definition, module_prefix, definition_map) do
-    fields =
-      definition.fields |> Enum.with_index() |> Enum.map(&message_field_arm(&1, definition_map))
-
-    """
-    fn #{decoder_name(definition.name)}_from_decoder<'a>(env: Env<'a>, decoder: &mut Decoder<'_>) -> NifResult<Term<'a>> {
-        static MODULE_ATOM: OnceLock<Atom> = OnceLock::new();
-        static STRUCT_KEYS: OnceLock<Vec<rustler::wrapper::NIF_TERM>> = OnceLock::new();
-        let module_atom = cached_atom(env, &MODULE_ATOM, #{rust_string(module_name(module_prefix, definition.name))});
-        let keys = cached_struct_keys(env, &STRUCT_KEYS, &[#{field_names(definition.fields)}]);
-        let mut values = default_values(module_atom, keys.len() - 1);
-        loop {
-            match decoder.read_var_uint()? {
-                0 => break,
-    #{indent(fields, 12)}
-                field => return Err(Error::Term(Box::new(format!("unknown field {} while decoding #{definition.name}", field)))),
-            }
-        }
-        make_struct(env, keys, &values)
-    }
-    """
+  defp definition_items(%Definition{kind: :message} = definition, module_prefix, definition_map) do
+    [
+      atom_static(module_atom_static(definition.name)),
+      keys_static(struct_keys_static(definition.name)),
+      message_decoder_item(definition, module_prefix, definition_map),
+      message_fields_decoder_item(definition, module_prefix, definition_map)
+    ]
   end
 
   defp atom_static(name) do
@@ -369,15 +420,65 @@ defmodule KiwiCodec.RustlerGenerator do
     end
   end
 
-  defp message_field_arm({field, index}, definition_map) do
-    value = field_value_source(field, definition_map)
+  defp message_decoder_item(%Definition{} = definition, module_prefix, definition_map) do
+    definition
+    |> generated_message_module!(module_prefix, definition_map)
+    |> MetaAST.item(decoder_function_name(definition.name))
+  end
 
-    """
-    #{field.value} => {
-        let value = #{value};
-        values[#{index + 1}] = value.encode(env).as_c_arg();
-    }
-    """
+  defp message_fields_decoder_item(%Definition{} = definition, module_prefix, definition_map) do
+    definition
+    |> generated_message_module!(module_prefix, definition_map)
+    |> MetaAST.item(message_fields_function_name(definition.name))
+  end
+
+  defp generated_message_module!(%Definition{} = definition, module_prefix, definition_map) do
+    module =
+      Module.concat([
+        KiwiCodec.RustlerGenerator.Generated,
+        "Message#{definition.name}#{:erlang.phash2({definition, module_prefix})}"
+      ])
+
+    if Code.ensure_loaded?(module) do
+      module
+    else
+      decoder_name = decoder_function_name(definition.name)
+      fields_name = message_fields_function_name(definition.name)
+
+      fields =
+        definition.fields
+        |> Enum.with_index()
+        |> Enum.map(fn {field, index} ->
+          {field.value, index + 1, field_value_expr(field, definition_map)}
+        end)
+
+      module_name = module_name(module_prefix, definition.name)
+
+      Module.create(
+        module,
+        quote do
+          use RustQ.Meta
+          alias RustQ.Type, as: R
+
+          import KiwiCodec.RustlerGenerator.Rusty,
+            only: [message_decoder: 6, message_fields_decoder: 2]
+
+          message_decoder(
+            unquote(decoder_name),
+            unquote(fields_name),
+            unquote(module_atom_static(definition.name)),
+            unquote(struct_keys_static(definition.name)),
+            unquote(module_name),
+            unquote(Enum.map(definition.fields, &field_name(&1.name)))
+          )
+
+          message_fields_decoder(unquote(fields_name), unquote(Macro.escape(fields)))
+        end,
+        Macro.Env.location(__ENV__)
+      )
+
+      module
+    end
   end
 
   defp field_value_expr(%{array?: true, type: "byte"}, _definition_map) do
@@ -405,24 +506,6 @@ defmodule KiwiCodec.RustlerGenerator do
           unquote(name)(env, decoder)
         end
       end)
-  end
-
-  defp field_value_source(%{array?: true, type: "byte"}, _definition_map) do
-    "decoder.read_byte_array(env)?"
-  end
-
-  defp field_value_source(%{array?: true} = field, definition_map) do
-    "decoder.read_repeated(|decoder| #{field_result_source(%{field | array?: false}, definition_map)})?"
-  end
-
-  defp field_value_source(field, definition_map),
-    do: "#{field_result_source(field, definition_map)}?"
-
-  defp field_result_source(field, definition_map) do
-    primitive_decoder_source(field) ||
-      field
-      |> referenced_definition!(definition_map)
-      |> then(&"#{decoder_name(&1.name)}_from_decoder(env, decoder)")
   end
 
   defp referenced_definition!(field, definition_map), do: Map.fetch!(definition_map, field.type)
@@ -467,16 +550,15 @@ defmodule KiwiCodec.RustlerGenerator do
     end
   end
 
-  defp rust_item_fragment(code) do
-    RustQ.parse_fragment!(:item, code)
-  end
-
   defp fragment_code(fragment), do: RustQ.Rust.to_fragment(fragment)
 
   defp decoder_name(name), do: "decode_#{rust_ident(name)}"
 
   defp decoder_function_name(name),
     do: name |> decoder_name() |> Kernel.<>("_from_decoder") |> RustQ.Atom.identifier!()
+
+  defp message_fields_function_name(name),
+    do: name |> decoder_name() |> Kernel.<>("_fields_from_decoder") |> RustQ.Atom.identifier!()
 
   defp module_atom_static(name), do: static_name(name, "MODULE_ATOM")
   defp struct_keys_static(name), do: static_name(name, "STRUCT_KEYS")
@@ -498,35 +580,9 @@ defmodule KiwiCodec.RustlerGenerator do
 
   defp field_name(name), do: Macro.underscore(name)
 
-  defp field_names(fields) do
-    Enum.map_join(fields, ", ", fn field -> field.name |> field_name() |> rust_string() end)
-  end
-
   defp rust_ident(name) do
     name
     |> Macro.underscore()
     |> String.replace(~r/[^a-zA-Z0-9_]/, "_")
-  end
-
-  defp rust_string(value) do
-    escaped =
-      value
-      |> String.replace("\\", "\\\\")
-      |> String.replace("\"", "\\\"")
-
-    "\"#{escaped}\""
-  end
-
-  defp indent(lines, spaces) when is_list(lines) do
-    lines |> Enum.join("\n") |> indent(spaces)
-  end
-
-  defp indent(text, spaces) do
-    padding = String.duplicate(" ", spaces)
-
-    text
-    |> String.trim_trailing()
-    |> String.split("\n")
-    |> Enum.map_join("\n", &(padding <> &1))
   end
 end
