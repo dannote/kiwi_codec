@@ -1,6 +1,78 @@
 defmodule KiwiCodec.RustlerGenerator.Rusty do
   @moduledoc false
 
+  defmacro struct_decoder(name, module_static, keys_static, module_name, key_names, field_exprs) do
+    {name, _binding} = Code.eval_quoted(name, [], __CALLER__)
+    {module_static, _binding} = Code.eval_quoted(module_static, [], __CALLER__)
+    {keys_static, _binding} = Code.eval_quoted(keys_static, [], __CALLER__)
+    module_static = static_path(module_static)
+    keys_static = static_path(keys_static)
+    {module_name, _binding} = Code.eval_quoted(module_name, [], __CALLER__)
+    {key_names, _binding} = Code.eval_quoted(key_names, [], __CALLER__)
+    {field_exprs, _binding} = Code.eval_quoted(field_exprs, [], __CALLER__)
+
+    fields = push_fields(field_exprs, quote(do: make_struct(env, keys, ref(values))))
+
+    quote do
+      @spec unquote(name)(
+              R.path(:Env, R.lifetime(:a)),
+              R.mut_ref(R.path(:Decoder, R.lifetime(:_)))
+            ) ::
+              R.nif_result(R.path(:Term, R.lifetime(:a)))
+      defrust unquote(name)(env, decoder) do
+        module_atom = cached_atom(env, ref(unquote(module_static)), unquote(module_name))
+        keys = cached_struct_keys(env, ref(unquote(keys_static)), ref(unquote(key_names)))
+        values = Vec.with_capacity(keys.len())
+        values.push(module_atom.as_c_arg())
+        unquote(fields)
+      end
+    end
+  end
+
+  defmacro entrypoint(nif_name, decoder_name) do
+    {nif_name, _binding} = Code.eval_quoted(nif_name, [], __CALLER__)
+    {decoder_name, _binding} = Code.eval_quoted(decoder_name, [], __CALLER__)
+
+    quote do
+      @nif schedule: "DirtyCpu"
+      @spec unquote(nif_name)(R.path(:Env, R.lifetime(:a)), R.path(:Binary, R.lifetime(:a))) ::
+              R.nif_result(R.path(:Term, R.lifetime(:a)))
+      defrust unquote(nif_name)(env, bytes) do
+        decoder = Decoder.new(bytes.as_slice())
+
+        case unquote(decoder_name)(env, mut_ref(decoder)) do
+          {:ok, term} ->
+            case decoder.finish() do
+              {:ok, _done} -> {:ok, term}
+              {:error, reason} -> {:error, reason}
+            end
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      end
+    end
+  end
+
+  defp static_path(name), do: {:__aliases__, [], [name]}
+
+  defp push_fields([], done), do: done
+
+  defp push_fields([expr | rest], done) do
+    next = push_fields(rest, done)
+
+    quote do
+      case unquote(expr) do
+        {:ok, value} ->
+          values.push(value.encode(env).as_c_arg())
+          unquote(next)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
   defmacro enum_decoder(name, variants) do
     {name, _binding} = Code.eval_quoted(name, [], __CALLER__)
     {variants, _binding} = Code.eval_quoted(variants, [], __CALLER__)
@@ -51,12 +123,9 @@ defmodule KiwiCodec.RustlerGenerator do
 
   alias KiwiCodec.Schema
   alias KiwiCodec.Schema.Definition
+  alias RustQ.Meta.AST, as: MetaAST
   alias RustQ.Rust
-  alias RustQ.Rust.AST
   alias RustQ.Rust.AST.Builder, as: A
-  alias RustQ.Rust.AST.Render
-
-  require A
 
   @primitive_decoders [
     {"bool", :read_bool, []},
@@ -70,8 +139,13 @@ defmodule KiwiCodec.RustlerGenerator do
   ]
 
   for {type, method, args} <- @primitive_decoders do
+    call =
+      quote do
+        decoder.unquote(method)(unquote_splicing(Enum.map(args, &Macro.var(&1, nil))))
+      end
+
     defp primitive_decoder_expr(%{type: unquote(type)}) do
-      A.method(:decoder, unquote(method), unquote(args))
+      unquote(Macro.escape(call))
     end
 
     defp primitive_decoder_source(%{type: unquote(type)}) do
@@ -165,7 +239,7 @@ defmodule KiwiCodec.RustlerGenerator do
     [
       atom_static(module_atom_static(definition.name)),
       keys_static(struct_keys_static(definition.name)),
-      Rust.ast_item(struct_decoder_ast(definition, module_prefix, definition_map))
+      struct_decoder_item(definition, module_prefix, definition_map)
     ]
   end
 
@@ -210,8 +284,9 @@ defmodule KiwiCodec.RustlerGenerator do
   end
 
   defp enum_decoder_item(%Definition{} = definition) do
-    module = generated_enum_module!(definition)
-    Enum.find(module.__rustq_asts__(), &(&1.name == decoder_function_name(definition.name)))
+    definition
+    |> generated_enum_module!()
+    |> MetaAST.item(decoder_function_name(definition.name))
   end
 
   defp generated_enum_module!(%Definition{} = definition) do
@@ -252,46 +327,46 @@ defmodule KiwiCodec.RustlerGenerator do
     end
   end
 
-  defp struct_decoder_ast(%Definition{} = definition, module_prefix, definition_map) do
-    module_atom = module_atom_static(definition.name)
-    struct_keys = struct_keys_static(definition.name)
-
-    %AST.Function{
-      name: decoder_function_name(definition.name),
-      lifetime: :a,
-      args: decoder_args(),
-      returns: term_result_type(),
-      body:
-        [
-          A.let(
-            :module_atom,
-            A.call(:cached_atom, [
-              :env,
-              A.ref(module_atom),
-              A.lit(module_name(module_prefix, definition.name))
-            ])
-          ),
-          A.let(
-            :keys,
-            A.call(:cached_struct_keys, [
-              :env,
-              A.ref(struct_keys),
-              A.ref(A.array(Enum.map(definition.fields, &A.lit(field_name(&1.name)))))
-            ])
-          ),
-          A.let_mut(:values, A.path_call([:Vec, :with_capacity], [A.method(:keys, :len)])),
-          A.stmt(A.method(:values, :push, [A.method(:module_atom, :as_c_arg)]))
-        ] ++
-          Enum.flat_map(definition.fields, &struct_field_stmts(&1, definition_map)) ++
-          [A.return(A.call(:make_struct, [:env, :keys, A.ref(:values)]))]
-    }
+  defp struct_decoder_item(%Definition{} = definition, module_prefix, definition_map) do
+    definition
+    |> generated_struct_module!(module_prefix, definition_map)
+    |> MetaAST.item(decoder_function_name(definition.name))
   end
 
-  defp struct_field_stmts(field, definition_map) do
-    [
-      A.let(:value, field_value_expr(field, definition_map)),
-      A.stmt(A.method(:values, :push, [A.method(A.method(:value, :encode, [:env]), :as_c_arg)]))
-    ]
+  defp generated_struct_module!(%Definition{} = definition, module_prefix, definition_map) do
+    module =
+      Module.concat([
+        KiwiCodec.RustlerGenerator.Generated,
+        "Struct#{definition.name}#{:erlang.phash2({definition, module_prefix})}"
+      ])
+
+    if Code.ensure_loaded?(module) do
+      module
+    else
+      name = decoder_function_name(definition.name)
+      field_exprs = Enum.map(definition.fields, &field_value_expr(&1, definition_map))
+
+      Module.create(
+        module,
+        quote do
+          use RustQ.Meta
+          alias RustQ.Type, as: R
+          import KiwiCodec.RustlerGenerator.Rusty, only: [struct_decoder: 6]
+
+          struct_decoder(
+            unquote(name),
+            unquote(module_atom_static(definition.name)),
+            unquote(struct_keys_static(definition.name)),
+            unquote(module_name(module_prefix, definition.name)),
+            unquote(Enum.map(definition.fields, &field_name(&1.name))),
+            unquote(Macro.escape(field_exprs))
+          )
+        end,
+        Macro.Env.location(__ENV__)
+      )
+
+      module
+    end
   end
 
   defp message_field_arm({field, index}, definition_map) do
@@ -306,25 +381,30 @@ defmodule KiwiCodec.RustlerGenerator do
   end
 
   defp field_value_expr(%{array?: true, type: "byte"}, _definition_map) do
-    A.try(A.method(:decoder, :read_byte_array, [:env]))
+    quote(do: decoder.read_byte_array(env))
   end
 
   defp field_value_expr(%{array?: true} = field, definition_map) do
-    A.try(
-      A.method(:decoder, :read_repeated, [
-        A.closure([:decoder], field_result_expr(%{field | array?: false}, definition_map))
-      ])
-    )
+    inner = field_result_expr(%{field | array?: false}, definition_map)
+
+    quote do
+      decoder.read_repeated(fn decoder -> unquote(inner) end)
+    end
   end
 
-  defp field_value_expr(field, definition_map),
-    do: A.try(field_result_expr(field, definition_map))
+  defp field_value_expr(field, definition_map), do: field_result_expr(field, definition_map)
 
   defp field_result_expr(field, definition_map) do
     primitive_decoder_expr(field) ||
       field
       |> referenced_definition!(definition_map)
-      |> then(&A.call(decoder_function_name(&1.name), [:env, :decoder]))
+      |> then(fn definition ->
+        name = decoder_function_name(definition.name)
+
+        quote do
+          unquote(name)(env, decoder)
+        end
+      end)
   end
 
   defp field_value_source(%{array?: true, type: "byte"}, _definition_map) do
@@ -349,56 +429,54 @@ defmodule KiwiCodec.RustlerGenerator do
 
   defp entrypoint_fragments(entrypoints) do
     Enum.map(entrypoints, fn {nif_name, definition_name} ->
-      definition_name
-      |> entrypoint_ast(nif_name)
-      |> Rust.ast_item()
+      entrypoint_item(nif_name, definition_name)
     end)
   end
 
-  defp entrypoint_ast(definition_name, nif_name) do
+  defp entrypoint_item(nif_name, definition_name) do
+    module = generated_entrypoint_module!(nif_name, definition_name)
+    MetaAST.item(module, RustQ.Atom.identifier!(to_string(nif_name)))
+  end
+
+  defp generated_entrypoint_module!(nif_name, definition_name) do
+    nif_name = RustQ.Atom.identifier!(to_string(nif_name))
     decoder_name = decoder_function_name(definition_name)
 
-    %AST.Function{
-      name: RustQ.Atom.identifier!(to_string(nif_name)),
-      vis: :pub,
-      lifetime: :a,
-      attrs: [A.nif_attr(schedule: "DirtyCpu")],
-      args: [
-        A.arg(:env, A.type_path(:Env, lifetimes: [:a])),
-        A.arg(:bytes, A.type_path(:Binary, lifetimes: [:a]))
-      ],
-      returns: A.type_path(:NifResult, generics: [A.type_path(:Term, lifetimes: [:a])]),
-      body: [
-        A.let_mut(:decoder, A.path_call([:Decoder, :new], [A.method(:bytes, :as_slice)])),
-        A.let(:term, A.try(A.call(decoder_name, [:env, A.mut_ref(:decoder)]))),
-        A.stmt(A.try(A.method(:decoder, :finish))),
-        A.return(A.ok(:term))
-      ]
-    }
+    module =
+      Module.concat([
+        KiwiCodec.RustlerGenerator.Generated,
+        "Entrypoint#{nif_name}#{:erlang.phash2(definition_name)}"
+      ])
+
+    if Code.ensure_loaded?(module) do
+      module
+    else
+      Module.create(
+        module,
+        quote do
+          use RustQ.Meta
+          alias RustQ.Type, as: R
+          import KiwiCodec.RustlerGenerator.Rusty, only: [entrypoint: 2]
+
+          entrypoint(unquote(nif_name), unquote(decoder_name))
+        end,
+        Macro.Env.location(__ENV__)
+      )
+
+      module
+    end
   end
 
   defp rust_item_fragment(code) do
     RustQ.parse_fragment!(:item, code)
   end
 
-  defp fragment_code(%AST.Function{} = item), do: Render.render_item(item)
   defp fragment_code(fragment), do: RustQ.Rust.to_fragment(fragment)
 
   defp decoder_name(name), do: "decode_#{rust_ident(name)}"
 
   defp decoder_function_name(name),
     do: name |> decoder_name() |> Kernel.<>("_from_decoder") |> RustQ.Atom.identifier!()
-
-  defp decoder_args do
-    [
-      A.arg(:env, A.type_path(:Env, lifetimes: [:a])),
-      A.arg(:decoder, "&mut Decoder<'_>")
-    ]
-  end
-
-  defp term_result_type do
-    A.type_path(:NifResult, generics: [A.type_path(:Term, lifetimes: [:a])])
-  end
 
   defp module_atom_static(name), do: static_name(name, "MODULE_ATOM")
   defp struct_keys_static(name), do: static_name(name, "STRUCT_KEYS")
