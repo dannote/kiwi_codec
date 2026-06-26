@@ -65,10 +65,12 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     """
 
     template = """
-    use rustler::{Binary, Env, NifResult, Term};
+    use rustler::{Binary, Env, Error, NifResult, Term};
     use rustler::types::atom::Atom;
+    use std::sync::OnceLock;
     use crate::runtime::Decoder;
 
+    __rq_rustler_helpers!();
     __rq_definitions!();
     __rq_entrypoints!();
     """
@@ -84,6 +86,8 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     Mix.Task.run("rustq.gen", ["--check", "--config", config])
     Mix.Task.reenable("rustq.gen")
 
+    assert generated =~ "fn cached_struct_keys"
+    assert generated =~ "fn make_struct_from_nif_term_arrays"
     assert generated =~ "fn decode_node_from_decoder"
     assert generated =~ "fn decode_point_from_decoder"
     assert generated =~ "fn decode_kind_from_decoder"
@@ -117,9 +121,11 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     """
 
     template = """
-    use rustler::{Env, NifResult, Term};
+    use rustler::{Env, Error, NifResult, Term};
     use rustler::types::atom::Atom;
+    use std::sync::OnceLock;
     use crate::runtime::Decoder;
+    __rq_rustler_helpers!();
     __rq_definitions!();
     """
 

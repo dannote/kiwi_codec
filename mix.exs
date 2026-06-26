@@ -1,7 +1,7 @@
 defmodule KiwiCodec.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.1.1"
   @source_url "https://github.com/dannote/kiwi_codec"
 
   def project do
@@ -56,7 +56,7 @@ defmodule KiwiCodec.MixProject do
   end
 
   defp rustq_dep do
-    {:rustq, "~> 0.8", runtime: false}
+    {:rustq, "~> 0.8.1", runtime: false}
   end
 
   defp package do

@@ -15,7 +15,11 @@ defmodule KiwiCodec.RustlerGenerator.Rusty do
     key_names = expand_arg!(key_names, __CALLER__)
     field_exprs = expand_arg!(field_exprs, __CALLER__)
 
-    fields = push_fields(field_exprs, quote(do: make_struct(env, keys, ref(values))))
+    fields =
+      push_fields(
+        field_exprs,
+        quote(do: make_struct_from_nif_term_arrays(env, keys, ref(values)))
+      )
 
     quote do
       @spec unquote(name)(
@@ -50,7 +54,7 @@ defmodule KiwiCodec.RustlerGenerator.Rusty do
       defrust unquote(name)(env, decoder) do
         module_atom = cached_atom(env, ref(unquote(module_static)), unquote(module_name))
         keys = cached_struct_keys(env, ref(unquote(keys_static)), ref(array(unquote(key_names))))
-        values = default_values(module_atom, keys.len() - 1)
+        values = default_struct_values(env, module_atom, keys.len() - 1)
         unquote(fields_name)(env, decoder, keys, values)
       end
     end
@@ -62,7 +66,7 @@ defmodule KiwiCodec.RustlerGenerator.Rusty do
 
     finish_clause =
       quote do
-        0 -> make_struct(env, keys, ref(values))
+        0 -> make_struct_from_nif_term_arrays(env, keys, ref(values))
       end
 
     clauses =

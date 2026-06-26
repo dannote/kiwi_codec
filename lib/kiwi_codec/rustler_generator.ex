@@ -12,12 +12,11 @@ defmodule KiwiCodec.RustlerGenerator do
   * `rustler::types::atom::Atom`
   * `std::sync::OnceLock`
   * a `Decoder<'a>` type with Kiwi primitive reader methods
-  * `cached_atom/3`
-  * `cached_struct_keys/3`
-  * `default_values/2`
-  * `make_struct/3`
+  * the `__rq_rustler_helpers!();` splice emitted by `splices/2`
 
-  See the examples in the README for a minimal RustQ template skeleton.
+  The helper splice provides cached atoms, cached struct keys, default struct
+  values, and raw `NIF_TERM` struct map construction. See the README for a
+  minimal RustQ template skeleton.
   """
 
   alias KiwiCodec.Schema
@@ -56,8 +55,8 @@ defmodule KiwiCodec.RustlerGenerator do
   Returns RustQ splice replacements for a schema.
 
   Use this from `rustq.exs` with `render/2`. The template must contain
-  `__rq_definitions!();` and, when NIF entrypoints are requested,
-  `__rq_entrypoints!();` splice anchors:
+  `__rq_rustler_helpers!();`, `__rq_definitions!();`, and, when NIF entrypoints
+  are requested, `__rq_entrypoints!();` splice anchors:
 
       generate :native_decoders, "native/my_nif/src/generated.rs" do
         schema = KiwiCodec.parse_schema!(File.read!("priv/schema.kiwi"))
@@ -82,9 +81,21 @@ defmodule KiwiCodec.RustlerGenerator do
     selected = select_definitions(schema, definitions, definition_map)
 
     [
+      {:rustler_helpers, rustler_helper_fragments()},
       {:definitions, definition_fragments(selected, module_prefix, definition_map)},
       {:entrypoints, entrypoint_fragments(entrypoints)}
     ] ++ Keyword.get(opts, :extra_splices, [])
+  end
+
+  defp rustler_helper_fragments do
+    RustQ.Rustler.cached_atoms([]) ++
+      RustQ.Rustler.term_helpers(
+        include: [
+          :cached_struct_keys,
+          :default_struct_values,
+          :make_struct_from_nif_term_arrays
+        ]
+      )
   end
 
   defp select_definitions(%Schema{} = schema, [], _definition_map), do: schema.definitions

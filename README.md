@@ -111,10 +111,10 @@ generate :native_decoders, "native/my_nif/src/generated.rs" do
 end
 ```
 
-The Rust template must define the shared Rustler imports, a Kiwi `Decoder`, and
-helper functions for cached atoms, struct keys, default values, and struct map
-construction. Generated definitions are inserted with `__rq_definitions!();` and
-NIF entrypoints with `__rq_entrypoints!();`.
+The Rust template must define the shared Rustler imports, `std::sync::OnceLock`,
+and a Kiwi `Decoder`. RustQ-provided atom and struct helpers are inserted with
+`__rq_rustler_helpers!();`, generated definitions with `__rq_definitions!();`,
+and NIF entrypoints with `__rq_entrypoints!();`.
 
 ## Containers
 
