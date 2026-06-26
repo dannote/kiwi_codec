@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.2.0 - 2026-06-26
+
 - Delegate LEB128/ZigZag integer encoding to the `varint` package while keeping Kiwi-specific range and error handling.
 - Replace vague `FieldProps`/`MessageProps` modules with `KiwiCodec.Metadata` and `KiwiCodec.Metadata.Field`.
 - Rename the Kiwi variable-length float wire module to `KiwiCodec.Wire.VarFloat`.
