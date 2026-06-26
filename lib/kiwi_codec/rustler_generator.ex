@@ -39,11 +39,12 @@ defmodule KiwiCodec.RustlerGenerator do
     * `:definitions` - schema definition names to generate, including their
       dependencies. Defaults to the requested entrypoint definitions, or all
       definitions when no entrypoints are requested.
-    * `:entrypoints` - `:all`, a NIF stub module, definition names, or
-      `{nif_name, definition_name}` entries for generated NIFs. Definition names
-      infer `decode_<definition_name>` NIFs. `:all` generates one inferred NIF
-      for every schema definition. A NIF stub module infers entries from exported
-      one-arity `decode_*` functions whose suffix matches a schema definition.
+    * `:entrypoints` - `:all`, `{:nif_stubs, path}`, a NIF stub module,
+      definition names, or `{nif_name, definition_name}` entries for generated
+      NIFs. Definition names infer `decode_<definition_name>` NIFs. `:all`
+      generates one inferred NIF for every schema definition. A NIF stub module
+      or stub source file infers entries from one-arity `decode_*` functions whose
+      suffix matches a schema definition.
     * `:module_prefix` - Elixir module prefix for decoded structs.
     * `:decoder` - Rust path imported as `Decoder`. Defaults to
       `"crate::runtime::Decoder"`.
@@ -78,16 +79,15 @@ defmodule KiwiCodec.RustlerGenerator do
     |> normalize_entrypoints(schema)
   end
 
+  defp normalize_entrypoints({:nif_stubs, path}, %Schema{} = schema) do
+    path
+    |> nif_stub_exports_from_file!()
+    |> entrypoints_from_exports(schema)
+  end
+
   defp normalize_entrypoints(module, %Schema{} = schema) when is_atom(module) do
     Code.ensure_loaded!(module)
-    definitions_by_underscore = Map.new(schema.definitions, &{Macro.underscore(&1.name), &1.name})
-
-    module.module_info(:exports)
-    |> Enum.flat_map(fn
-      {name, 1} -> entrypoint_from_export(name, definitions_by_underscore)
-      _export -> []
-    end)
-    |> Enum.sort_by(fn {nif_name, _definition_name} -> to_string(nif_name) end)
+    module.module_info(:exports) |> entrypoints_from_exports(schema)
   end
 
   defp normalize_entrypoints(entrypoints, %Schema{}) do
@@ -95,6 +95,37 @@ defmodule KiwiCodec.RustlerGenerator do
       {nif_name, definition_name} -> {nif_name, to_string(definition_name)}
       definition_name -> {inferred_entrypoint_name(definition_name), to_string(definition_name)}
     end)
+  end
+
+  defp entrypoints_from_exports(exports, %Schema{} = schema) do
+    definitions_by_underscore = Map.new(schema.definitions, &{Macro.underscore(&1.name), &1.name})
+
+    exports
+    |> Enum.flat_map(fn
+      {name, 1} -> entrypoint_from_export(name, definitions_by_underscore)
+      _export -> []
+    end)
+    |> Enum.sort_by(fn {nif_name, _definition_name} -> to_string(nif_name) end)
+  end
+
+  defp nif_stub_exports_from_file!(path) do
+    path
+    |> File.read!()
+    |> Code.string_to_quoted!()
+    |> stubs_attribute!()
+  end
+
+  defp stubs_attribute!(ast) do
+    {_ast, attributes} =
+      Macro.prewalk(ast, [], fn
+        {:@, _meta, [{:stubs, _attr_meta, [stubs]}]} = node, acc -> {node, [stubs | acc]}
+        node, acc -> {node, acc}
+      end)
+
+    case attributes do
+      [stubs | _rest] when is_list(stubs) -> stubs
+      _other -> raise ArgumentError, "expected @stubs keyword list in NIF stub source"
+    end
   end
 
   defp entrypoint_from_export(name, definitions_by_underscore) do

@@ -24,6 +24,7 @@
 - Infer Rustler generator entrypoint names and selected definitions from requested schema definitions.
 - Render Rustler generator source prelude with RustQ AST imports instead of raw Rust strings.
 - Infer Rustler generator entrypoints from matching exported NIF stub modules.
+- Infer Rustler generator entrypoints from NIF stub source files without loading Rustler modules.
 
 ## v0.1.1 - 2026-06-25
 
