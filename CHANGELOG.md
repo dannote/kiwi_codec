@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Delegate LEB128/ZigZag integer encoding to the `varint` package while keeping Kiwi-specific range and error handling.
+
 ## v0.1.1 - 2026-06-25
 
 - Reject unexpected characters while parsing `.kiwi` schema text.

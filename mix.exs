@@ -46,6 +46,7 @@ defmodule KiwiCodec.MixProject do
   defp deps do
     [
       rustq_dep(),
+      {:varint, "~> 1.6"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
