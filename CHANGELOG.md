@@ -15,6 +15,7 @@
 - Split vague `KiwiCodec.Compiler` responsibilities into `KiwiCodec.ModuleCompiler` and `KiwiCodec.FileGenerator`.
 - Split parsed schema members into `KiwiCodec.Schema.Field` with `id` and `KiwiCodec.Schema.EnumVariant` with `value`.
 - Replace overloaded parsed schema definitions with `KiwiCodec.Schema.Enum`, `KiwiCodec.Schema.Struct`, and `KiwiCodec.Schema.Message`.
+- Extract compact binary schema type-reference encoding into `KiwiCodec.Schema.Binary.TypeIndex`.
 
 ## v0.1.1 - 2026-06-25
 

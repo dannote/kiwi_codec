@@ -4,6 +4,7 @@ defmodule KiwiCodec.Schema.Binary do
   """
 
   alias KiwiCodec.Schema
+  alias KiwiCodec.Schema.Binary.TypeIndex
   alias KiwiCodec.Schema.Enum, as: SchemaEnum
   alias KiwiCodec.Schema.{EnumVariant, Field, Message, Struct}
   alias KiwiCodec.Wire
@@ -53,7 +54,7 @@ defmodule KiwiCodec.Schema.Binary do
     if rest != "", do: raise(KiwiCodec.DecodeError, message: "trailing bytes in binary schema")
 
     definitions = Enum.reverse(definitions)
-    %Schema{definitions: bind_types!(definitions)}
+    %Schema{definitions: bind_field_types!(definitions)}
   end
 
   defp encode_definition(%SchemaEnum{} = definition, definition_index) do
@@ -69,24 +70,15 @@ defmodule KiwiCodec.Schema.Binary do
   end
 
   defp encode_definition_members(name, kind, members, definition_index) do
-    kind_index = Enum.find_index(@kinds, &(&1 == kind))
-
     [
       Wire.encode(:string, name),
-      Wire.encode(:byte, kind_index),
+      Wire.encode(:byte, kind_to_index!(kind)),
       Varint.encode_uint(length(members)),
-      Enum.map(members, &encode_field(&1, definition_index))
+      Enum.map(members, &encode_member(&1, definition_index))
     ]
   end
 
-  defp decode_kind!(index) when is_integer(index) and index >= 0 and index < @kind_count,
-    do: elem(@kinds_tuple, index)
-
-  defp decode_kind!(_index) do
-    raise KiwiCodec.DecodeError, message: "invalid definition kind in binary schema"
-  end
-
-  defp encode_field(%EnumVariant{} = variant, _definition_index) do
+  defp encode_member(%EnumVariant{} = variant, _definition_index) do
     [
       Wire.encode(:string, variant.name),
       Varint.encode_int(0),
@@ -95,17 +87,10 @@ defmodule KiwiCodec.Schema.Binary do
     ]
   end
 
-  defp encode_field(%Field{} = field, definition_index) do
-    type_index = KiwiCodec.PrimitiveType.binary_schema_index(field.type)
-
-    encoded_type =
-      if is_nil(type_index),
-        do: Map.fetch!(definition_index, field.type),
-        else: Bitwise.bnot(type_index)
-
+  defp encode_member(%Field{} = field, definition_index) do
     [
       Wire.encode(:string, field.name),
-      Varint.encode_int(encoded_type),
+      Varint.encode_int(TypeIndex.encode(field, definition_index)),
       Wire.encode(:byte, if(field.array?, do: 1, else: 0)),
       Varint.encode_uint(field.id)
     ]
@@ -114,19 +99,19 @@ defmodule KiwiCodec.Schema.Binary do
   defp decode_definition(binary) do
     {name, rest} = Wire.decode(:string, binary)
     {kind_index, rest} = Wire.decode(:byte, rest)
-    kind = decode_kind!(kind_index)
+    kind = kind_from_index!(kind_index)
     {field_count, rest} = Varint.decode_uint(rest)
 
     {members, rest} =
       Enum.reduce(1..field_count//1, {[], rest}, fn _index, {acc, tail} ->
-        {field, next} = decode_field(tail, kind)
-        {[field | acc], next}
+        {member, next} = decode_member(tail, kind)
+        {[member | acc], next}
       end)
 
     {decode_definition_struct(kind, name, Enum.reverse(members)), rest}
   end
 
-  defp decode_field(binary, kind) do
+  defp decode_member(binary, kind) do
     {name, rest} = Wire.decode(:string, binary)
     {type, rest} = Varint.decode_int(rest)
     {array_flag, rest} = Wire.decode(:byte, rest)
@@ -135,15 +120,29 @@ defmodule KiwiCodec.Schema.Binary do
     {decode_schema_member(kind, name, type, array_flag, value), rest}
   end
 
-  defp bind_types!(definitions) do
+  defp bind_field_types!(definitions) do
     Enum.map(definitions, fn
       %SchemaEnum{} = definition ->
         definition
 
       definition ->
-        fields = Enum.map(definition.fields, &bind_type!(&1, definitions))
+        fields = Enum.map(definition.fields, &bind_field_type!(&1, definitions))
         %{definition | fields: fields}
     end)
+  end
+
+  defp kind_to_index!(kind) do
+    case Enum.find_index(@kinds, &(&1 == kind)) do
+      nil -> raise KiwiCodec.EncodeError, message: "invalid definition kind #{inspect(kind)}"
+      index -> index
+    end
+  end
+
+  defp kind_from_index!(index) when is_integer(index) and index >= 0 and index < @kind_count,
+    do: elem(@kinds_tuple, index)
+
+  defp kind_from_index!(_index) do
+    raise KiwiCodec.DecodeError, message: "invalid definition kind in binary schema"
   end
 
   defp decode_definition_struct(:enum, name, variants),
@@ -160,15 +159,8 @@ defmodule KiwiCodec.Schema.Binary do
     %Field{name: name, type: type, array?: Bitwise.band(array_flag, 1) == 1, id: id}
   end
 
-  defp bind_type!(%EnumVariant{} = variant, _definitions), do: variant
-
-  defp bind_type!(%Field{type: type} = field, _definitions) when is_integer(type) and type < 0 do
-    index = Bitwise.bnot(type)
-    %{field | type: KiwiCodec.PrimitiveType.binary_schema_name!(index)}
-  end
-
-  defp bind_type!(%Field{type: type} = field, definitions) when is_integer(type) do
-    %{field | type: definitions |> Enum.fetch!(type) |> Map.fetch!(:name)}
+  defp bind_field_type!(%Field{type: type} = field, definitions) when is_integer(type) do
+    %{field | type: TypeIndex.decode(type, definitions)}
   end
 
   defp reraise_decode_error(%KiwiCodec.DecodeError{} = error, stacktrace),
