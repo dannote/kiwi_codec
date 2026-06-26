@@ -39,9 +39,11 @@ defmodule KiwiCodec.RustlerGenerator do
     * `:definitions` - schema definition names to generate, including their
       dependencies. Defaults to the requested entrypoint definitions, or all
       definitions when no entrypoints are requested.
-    * `:entrypoints` - `:all`, definition names, or `{nif_name, definition_name}`
-      entries for generated NIFs. Definition names infer `decode_<definition_name>`
-      NIFs. `:all` generates one inferred NIF for every schema definition.
+    * `:entrypoints` - `:all`, a NIF stub module, definition names, or
+      `{nif_name, definition_name}` entries for generated NIFs. Definition names
+      infer `decode_<definition_name>` NIFs. `:all` generates one inferred NIF
+      for every schema definition. A NIF stub module infers entries from exported
+      one-arity `decode_*` functions whose suffix matches a schema definition.
     * `:module_prefix` - Elixir module prefix for decoded structs.
     * `:decoder` - Rust path imported as `Decoder`. Defaults to
       `"crate::runtime::Decoder"`.
@@ -76,11 +78,34 @@ defmodule KiwiCodec.RustlerGenerator do
     |> normalize_entrypoints(schema)
   end
 
+  defp normalize_entrypoints(module, %Schema{} = schema) when is_atom(module) do
+    Code.ensure_loaded!(module)
+    definitions_by_underscore = Map.new(schema.definitions, &{Macro.underscore(&1.name), &1.name})
+
+    module.module_info(:exports)
+    |> Enum.flat_map(fn
+      {name, 1} -> entrypoint_from_export(name, definitions_by_underscore)
+      _export -> []
+    end)
+    |> Enum.sort_by(fn {nif_name, _definition_name} -> to_string(nif_name) end)
+  end
+
   defp normalize_entrypoints(entrypoints, %Schema{}) do
     Enum.map(entrypoints, fn
       {nif_name, definition_name} -> {nif_name, to_string(definition_name)}
       definition_name -> {inferred_entrypoint_name(definition_name), to_string(definition_name)}
     end)
+  end
+
+  defp entrypoint_from_export(name, definitions_by_underscore) do
+    name = to_string(name)
+
+    with "decode_" <> suffix <- name,
+         {:ok, definition_name} <- Map.fetch(definitions_by_underscore, suffix) do
+      [{name, definition_name}]
+    else
+      _other -> []
+    end
   end
 
   defp inferred_entrypoint_name(definition_name) do

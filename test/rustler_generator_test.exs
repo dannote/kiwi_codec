@@ -123,6 +123,41 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     assert generated =~ "fn decode_kind_from_decoder"
   end
 
+  defmodule NativeStubs do
+    @moduledoc "Test NIF stub module used for Rustler generator entrypoint inference."
+
+    def decode_image(_binary), do: :erlang.nif_error(:nif_not_loaded)
+    def decode_node(_binary), do: :erlang.nif_error(:nif_not_loaded)
+    def decode_sparse_message(_binary), do: :erlang.nif_error(:nif_not_loaded)
+  end
+
+  test "infers entrypoints from exported NIF stubs matching schema definitions" do
+    schema_source = """
+    struct Node {
+      uint id;
+    }
+
+    message Image {
+      byte[] hash = 1;
+    }
+
+    message Message {
+      Node node = 1;
+    }
+    """
+
+    {generated, _config} =
+      generate_with_rustq_gen!(schema_source,
+        entrypoints: NativeStubs,
+        module_prefix: "Example.Schema"
+      )
+
+    assert generated =~ "fn decode_image"
+    assert generated =~ "fn decode_node"
+    refute generated =~ "fn decode_message<'a>"
+    refute generated =~ "fn decode_sparse_message"
+  end
+
   test "infers entrypoints for every schema definition" do
     schema_source = """
     enum Kind {
