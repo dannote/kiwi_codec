@@ -4,7 +4,7 @@ defmodule KiwiCodec.Schema.Binary do
   """
 
   alias KiwiCodec.Schema
-  alias KiwiCodec.Schema.{Definition, Field}
+  alias KiwiCodec.Schema.{Definition, EnumVariant, Field}
   alias KiwiCodec.Wire
   alias KiwiCodec.Wire.Varint
 
@@ -73,21 +73,28 @@ defmodule KiwiCodec.Schema.Binary do
     raise KiwiCodec.DecodeError, message: "invalid definition kind in binary schema"
   end
 
-  defp encode_field(field, definition_index) do
+  defp encode_field(%EnumVariant{} = variant, _definition_index) do
+    [
+      Wire.encode(:string, variant.name),
+      Varint.encode_int(0),
+      Wire.encode(:byte, 0),
+      Varint.encode_uint(variant.value)
+    ]
+  end
+
+  defp encode_field(%Field{} = field, definition_index) do
     type_index = KiwiCodec.PrimitiveType.binary_schema_index(field.type)
 
     encoded_type =
-      cond do
-        is_nil(field.type) -> 0
-        is_nil(type_index) -> Map.fetch!(definition_index, field.type)
-        true -> Bitwise.bnot(type_index)
-      end
+      if is_nil(type_index),
+        do: Map.fetch!(definition_index, field.type),
+        else: Bitwise.bnot(type_index)
 
     [
       Wire.encode(:string, field.name),
       Varint.encode_int(encoded_type),
       Wire.encode(:byte, if(field.array?, do: 1, else: 0)),
-      Varint.encode_uint(field.value)
+      Varint.encode_uint(field.id)
     ]
   end
 
@@ -112,12 +119,7 @@ defmodule KiwiCodec.Schema.Binary do
     {array_flag, rest} = Wire.decode(:byte, rest)
     {value, rest} = Varint.decode_uint(rest)
 
-    {%Field{
-       name: name,
-       type: if(kind == :enum, do: nil, else: type),
-       array?: Bitwise.band(array_flag, 1) == 1,
-       value: value
-     }, rest}
+    {decode_schema_member(kind, name, type, array_flag, value), rest}
   end
 
   defp bind_types!(definitions) do
@@ -127,7 +129,15 @@ defmodule KiwiCodec.Schema.Binary do
     end)
   end
 
-  defp bind_type!(%Field{type: nil} = field, _definitions), do: field
+  defp decode_schema_member(:enum, name, _type, _array_flag, value) do
+    %EnumVariant{name: name, value: value}
+  end
+
+  defp decode_schema_member(_kind, name, type, array_flag, id) do
+    %Field{name: name, type: type, array?: Bitwise.band(array_flag, 1) == 1, id: id}
+  end
+
+  defp bind_type!(%EnumVariant{} = variant, _definitions), do: variant
 
   defp bind_type!(%Field{type: type} = field, _definitions) when is_integer(type) and type < 0 do
     index = Bitwise.bnot(type)

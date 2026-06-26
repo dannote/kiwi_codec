@@ -71,7 +71,7 @@ defmodule KiwiCodec.ModuleGenerator do
     opts = field_options(schema, field, prefix)
 
     quote do
-      field(unquote(name), unquote(field.value), unquote(Macro.escape(opts)))
+      field(unquote(name), unquote(field.id), unquote(Macro.escape(opts)))
     end
   end
 

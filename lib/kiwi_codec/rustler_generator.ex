@@ -270,7 +270,7 @@ defmodule KiwiCodec.RustlerGenerator do
         definition.fields
         |> Enum.with_index()
         |> Enum.map(fn {field, index} ->
-          {field.value, index + 1, field_value_expr(field, definition_map)}
+          {field.id, index + 1, field_value_expr(field, definition_map)}
         end)
 
       module_name = Name.module_name(module_prefix, definition.name)

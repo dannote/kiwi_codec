@@ -13,6 +13,7 @@
 - Centralize Kiwi primitive type metadata in `KiwiCodec.PrimitiveType`.
 - Rename schema runtime interpretation to `KiwiCodec.SchemaInterpreter`.
 - Split vague `KiwiCodec.Compiler` responsibilities into `KiwiCodec.ModuleCompiler` and `KiwiCodec.FileGenerator`.
+- Split parsed schema members into `KiwiCodec.Schema.Field` with `id` and `KiwiCodec.Schema.EnumVariant` with `value`.
 
 ## v0.1.1 - 2026-06-25
 

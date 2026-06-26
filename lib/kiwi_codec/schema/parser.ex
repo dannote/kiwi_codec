@@ -14,7 +14,7 @@ defmodule KiwiCodec.Schema.Parser do
   end
 
   alias KiwiCodec.Schema
-  alias KiwiCodec.Schema.{Definition, Field}
+  alias KiwiCodec.Schema.{Definition, EnumVariant, Field}
 
   @reserved_names ~w(ByteBuffer package)
   @token_pattern ~r/((?:-|\b)\d+\b|[=;{}]|\[\]|\[deprecated\]|\b[A-Za-z_][A-Za-z0-9_]*\b|\/\/.*|\s+)/
@@ -109,14 +109,14 @@ defmodule KiwiCodec.Schema.Parser do
     value = parse_integer!(value_token)
     {_, rest} = expect!(rest, ";")
 
-    field = %Field{
+    variant = %EnumVariant{
       name: name_token.text,
       value: value,
       line: name_token.line,
       column: name_token.column
     }
 
-    parse_fields(rest, :enum, [field | acc])
+    parse_fields(rest, :enum, [variant | acc])
   end
 
   defp parse_fields([type_token | rest], kind, acc) do
@@ -125,7 +125,7 @@ defmodule KiwiCodec.Schema.Parser do
     [name_token | rest] = rest
     expect_identifier!(name_token)
 
-    {value, rest} =
+    {id, rest} =
       if kind == :struct do
         {length(acc) + 1, rest}
       else
@@ -142,7 +142,7 @@ defmodule KiwiCodec.Schema.Parser do
       type: type_token.text,
       array?: array?,
       deprecated?: deprecated?,
-      value: value,
+      id: id,
       line: name_token.line,
       column: name_token.column
     }
@@ -192,7 +192,7 @@ defmodule KiwiCodec.Schema.Parser do
   defp verify_definitions!(schema, defined) do
     Enum.each(schema.definitions, fn definition ->
       verify_field_names!(definition)
-      verify_field_values!(definition)
+      verify_member_ids!(definition)
       verify_field_types!(definition, defined)
     end)
 
@@ -207,13 +207,21 @@ defmodule KiwiCodec.Schema.Parser do
     end
   end
 
-  defp verify_field_values!(%Definition{kind: :struct}), do: :ok
+  defp verify_member_ids!(%Definition{kind: :struct}), do: :ok
 
-  defp verify_field_values!(definition) do
+  defp verify_member_ids!(%Definition{kind: :enum} = definition) do
     values = Enum.map(definition.fields, & &1.value)
 
     if values != Enum.uniq(values) do
-      raise ArgumentError, "duplicate field value in #{definition.name}"
+      raise ArgumentError, "duplicate enum value in #{definition.name}"
+    end
+  end
+
+  defp verify_member_ids!(%Definition{kind: :message} = definition) do
+    ids = Enum.map(definition.fields, & &1.id)
+
+    if ids != Enum.uniq(ids) do
+      raise ArgumentError, "duplicate field id in #{definition.name}"
     end
   end
 

@@ -57,7 +57,7 @@ defmodule KiwiCodec.SchemaInterpreter do
 
       id ->
         field =
-          Enum.find(definition.fields, &(&1.value == id)) || raise_unknown_field(definition, id)
+          Enum.find(definition.fields, &(&1.id == id)) || raise_unknown_field(definition, id)
 
         {value, tail} = decode_wire_field(schema, field, rest)
         decode_message(schema, definition, tail, Map.put(acc, field.name, value))
@@ -123,7 +123,7 @@ defmodule KiwiCodec.SchemaInterpreter do
         []
 
       field_value ->
-        [Varint.encode_uint(field.value), encode_wire_field(schema, field, field_value)]
+        [Varint.encode_uint(field.id), encode_wire_field(schema, field, field_value)]
     end
   end
 

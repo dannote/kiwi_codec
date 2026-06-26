@@ -30,7 +30,10 @@ defmodule KiwiCodec.RustlerGenerator.Selection do
 
       dependencies =
         definition.fields
-        |> Enum.map(& &1.type)
+        |> Enum.flat_map(fn
+          %{type: type} -> [type]
+          _variant -> []
+        end)
         |> Enum.filter(&Map.has_key?(definition_map, &1))
 
       include_dependencies(names ++ dependencies, definition_map, MapSet.put(acc, name))

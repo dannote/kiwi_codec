@@ -29,9 +29,12 @@ defmodule KiwiCodec.SchemaTest do
     schema = Parser.parse!(@schema_text)
 
     assert Enum.map(schema.definitions, & &1.name) == ["NodeType", "Vector", "NodeChange"]
+
+    [variant | _] = hd(schema.definitions).fields
+    assert %KiwiCodec.Schema.EnumVariant{name: "NONE", value: 0} = variant
+
     assert [id | _] = List.last(schema.definitions).fields
-    assert id.name == "id"
-    assert id.value == 1
+    assert %KiwiCodec.Schema.Field{name: "id", id: 1} = id
   end
 
   test "round-trips binary schema" do

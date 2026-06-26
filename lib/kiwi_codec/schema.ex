@@ -23,13 +23,14 @@ defmodule KiwiCodec.Schema.Definition do
   Kiwi enum, struct, or message definition.
   """
 
-  alias KiwiCodec.Schema.Field
+  alias KiwiCodec.Schema.{EnumVariant, Field}
 
   @type kind :: :enum | :struct | :message
+  @type member :: Field.t() | EnumVariant.t()
   @type t :: %__MODULE__{
           name: String.t(),
           kind: kind(),
-          fields: [Field.t()],
+          fields: [member()],
           line: non_neg_integer(),
           column: non_neg_integer()
         }
@@ -43,15 +44,15 @@ end
 
 defmodule KiwiCodec.Schema.Field do
   @moduledoc """
-  Kiwi schema field or enum member.
+  Kiwi struct or message field.
   """
 
   @type t :: %__MODULE__{
           name: String.t(),
-          type: String.t() | nil,
+          type: String.t(),
           array?: boolean(),
           deprecated?: boolean(),
-          value: integer(),
+          id: pos_integer(),
           line: non_neg_integer(),
           column: non_neg_integer()
         }
@@ -60,6 +61,24 @@ defmodule KiwiCodec.Schema.Field do
             type: nil,
             array?: false,
             deprecated?: false,
+            id: nil,
+            line: 0,
+            column: 0
+end
+
+defmodule KiwiCodec.Schema.EnumVariant do
+  @moduledoc """
+  Kiwi enum variant.
+  """
+
+  @type t :: %__MODULE__{
+          name: String.t(),
+          value: integer(),
+          line: non_neg_integer(),
+          column: non_neg_integer()
+        }
+
+  defstruct name: nil,
             value: nil,
             line: 0,
             column: 0
