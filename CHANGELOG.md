@@ -25,6 +25,7 @@
 - Render Rustler generator source prelude with RustQ AST imports instead of raw Rust strings.
 - Infer Rustler generator entrypoints from matching exported NIF stub modules.
 - Infer Rustler generator entrypoints from explicit NIF stub metadata modules without loading Rustler modules.
+- Document inferred Rustler entrypoints and NIF stub metadata usage.
 
 ## v0.1.1 - 2026-06-25
 

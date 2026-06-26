@@ -102,8 +102,31 @@ schema = KiwiCodec.parse_schema!(File.read!("priv/schema.kiwi"))
 
 generate :native_decoders, "native/my_nif/src/generated.rs" do
   content KiwiCodec.RustlerGenerator.source(schema,
-    definitions: ["Node"],
-    entrypoints: [decode_node: "Node"],
+    entrypoints: ["Node"],
+    module_prefix: "MyApp.Schema"
+  )
+end
+```
+
+Definition names infer NIF names such as `decode_node`. For Rustler projects,
+prefer keeping the native API list in one non-Rustler metadata module:
+
+```elixir
+defmodule MyApp.Native.Nifs do
+  @moduledoc "Native NIF stubs exposed by MyApp."
+
+  @stubs [decode_node: 1, decode_image: 1]
+
+  def stubs, do: @stubs
+end
+```
+
+Then use the same metadata from `rustq.exs`:
+
+```elixir
+generate :native_decoders, "native/my_nif/src/generated.rs" do
+  content KiwiCodec.RustlerGenerator.source(schema,
+    entrypoints: {:nif_stubs, MyApp.Native.Nifs},
     module_prefix: "MyApp.Schema"
   )
 end

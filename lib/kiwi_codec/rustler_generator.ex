@@ -28,8 +28,7 @@ defmodule KiwiCodec.RustlerGenerator do
         schema = KiwiCodec.parse_schema!(File.read!("priv/schema.kiwi"))
 
         content KiwiCodec.RustlerGenerator.source(schema,
-          definitions: ["Node"],
-          entrypoints: [decode_node: "Node"],
+          entrypoints: ["Node"],
           module_prefix: "Example.Schema"
         )
       end
