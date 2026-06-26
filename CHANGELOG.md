@@ -21,6 +21,7 @@
 - Split schema tokenization and validation out of `KiwiCodec.Schema.Parser`.
 - Group published HexDocs modules without hiding source documentation.
 - Refresh README installation instructions for the latest released version.
+- Infer Rustler generator entrypoint names and selected definitions from requested schema definitions.
 
 ## v0.1.1 - 2026-06-25
 

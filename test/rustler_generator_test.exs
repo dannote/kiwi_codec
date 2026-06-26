@@ -88,6 +88,41 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     refute generated =~ "__rq_"
   end
 
+  test "infers entrypoint NIF names and selected definitions from definition names" do
+    schema_source = """
+    enum Kind {
+      Rectangle = 1;
+    }
+
+    struct Point {
+      float x;
+      float y;
+    }
+
+    struct Node {
+      Kind kind;
+      Point position;
+    }
+
+    message Image {
+      byte[] hash = 1;
+    }
+    """
+
+    {generated, _config} =
+      generate_with_rustq_gen!(schema_source,
+        entrypoints: ["Node", "Image"],
+        module_prefix: "Example.Schema"
+      )
+
+    assert generated =~ "fn decode_node"
+    assert generated =~ "fn decode_image"
+    assert generated =~ "fn decode_node_from_decoder"
+    assert generated =~ "fn decode_image_from_decoder"
+    assert generated =~ "fn decode_point_from_decoder"
+    assert generated =~ "fn decode_kind_from_decoder"
+  end
+
   test "renders enum and struct decoders from schema-specific RustQ items" do
     schema_source = """
     enum Kind {

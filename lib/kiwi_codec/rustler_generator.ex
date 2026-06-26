@@ -36,8 +36,10 @@ defmodule KiwiCodec.RustlerGenerator do
   Options:
 
     * `:definitions` - schema definition names to generate, including their
-      dependencies. Defaults to all definitions.
-    * `:entrypoints` - `{nif_name, definition_name}` entries for generated NIFs.
+      dependencies. Defaults to the requested entrypoint definitions, or all
+      definitions when no entrypoints are requested.
+    * `:entrypoints` - definition names or `{nif_name, definition_name}` entries
+      for generated NIFs. Definition names infer `decode_<definition_name>` NIFs.
     * `:module_prefix` - Elixir module prefix for decoded structs.
     * `:decoder` - Rust path imported as `Decoder`. Defaults to
       `"crate::runtime::Decoder"`.
@@ -52,8 +54,8 @@ defmodule KiwiCodec.RustlerGenerator do
   end
 
   defp generated_fragments(%Schema{} = schema, opts) do
-    definitions = Keyword.get(opts, :definitions, [])
-    entrypoints = Keyword.get(opts, :entrypoints, [])
+    entrypoints = opts |> Keyword.get(:entrypoints, []) |> normalize_entrypoints()
+    definitions = Keyword.get(opts, :definitions, inferred_definitions(entrypoints))
     module_prefix = Keyword.fetch!(opts, :module_prefix)
 
     definition_map = Selection.definition_map(schema)
@@ -64,6 +66,26 @@ defmodule KiwiCodec.RustlerGenerator do
       Definition.fragments(selected, module_prefix, definition_map),
       Entrypoint.fragments(entrypoints)
     ]
+  end
+
+  defp normalize_entrypoints(entrypoints) do
+    Enum.map(entrypoints, fn
+      {nif_name, definition_name} -> {nif_name, to_string(definition_name)}
+      definition_name -> {inferred_entrypoint_name(definition_name), to_string(definition_name)}
+    end)
+  end
+
+  defp inferred_entrypoint_name(definition_name) do
+    definition_name
+    |> to_string()
+    |> Macro.underscore()
+    |> then(&"decode_#{&1}")
+  end
+
+  defp inferred_definitions([]), do: []
+
+  defp inferred_definitions(entrypoints) do
+    Enum.map(entrypoints, fn {_nif_name, definition_name} -> definition_name end)
   end
 
   defp source_header(opts) do
