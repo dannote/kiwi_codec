@@ -37,13 +37,13 @@ schema = KiwiCodec.parse_schema!(schema_text)
 static_value = struct(BenchSchema.Node, id: 1, kind: :node, name: "demo", position: struct(BenchSchema.Point, x: 1.0, y: 2.0))
 runtime_value = %{"id" => 1, "kind" => "NODE", "name" => "demo", "position" => %{"x" => 1.0, "y" => 2.0}}
 static_binary = KiwiCodec.encode(static_value)
-runtime_binary = KiwiCodec.Runtime.encode(schema, "Node", runtime_value)
+runtime_binary = KiwiCodec.SchemaInterpreter.encode(schema, "Node", runtime_value)
 
 jobs = %{
   "static encode" => fn -> KiwiCodec.encode(static_value) end,
   "static decode" => fn -> KiwiCodec.decode(static_binary, BenchSchema.Node) end,
-  "runtime encode" => fn -> KiwiCodec.Runtime.encode(schema, "Node", runtime_value) end,
-  "runtime decode" => fn -> KiwiCodec.Runtime.decode(schema, "Node", runtime_binary) end
+  "runtime encode" => fn -> KiwiCodec.SchemaInterpreter.encode(schema, "Node", runtime_value) end,
+  "runtime decode" => fn -> KiwiCodec.SchemaInterpreter.decode(schema, "Node", runtime_binary) end
 }
 
 if Code.ensure_loaded?(Benchee) do
