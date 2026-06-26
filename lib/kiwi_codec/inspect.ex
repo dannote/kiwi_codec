@@ -5,11 +5,13 @@ defmodule KiwiCodec.Inspect do
 
   import Inspect.Algebra
 
-  alias KiwiCodec.MessageProps
+  alias KiwiCodec.Metadata
 
   def inspect(%module{} = value, opts) do
-    props = module.__kiwi_props__()
-    {fields, more?} = props.ordered_fields |> visible_fields(props, value) |> limit_fields(opts)
+    metadata = module.__kiwi_props__()
+
+    {fields, more?} =
+      metadata.ordered_fields |> visible_fields(metadata, value) |> limit_fields(opts)
 
     concat([
       "#",
@@ -21,9 +23,9 @@ defmodule KiwiCodec.Inspect do
     ])
   end
 
-  defp visible_fields(fields, %MessageProps{kind: :struct}, _value), do: fields
+  defp visible_fields(fields, %Metadata{kind: :struct}, _value), do: fields
 
-  defp visible_fields(fields, %MessageProps{kind: :message}, value) do
+  defp visible_fields(fields, %Metadata{kind: :message}, value) do
     Enum.filter(fields, fn field -> not is_nil(Map.get(value, field.name)) end)
   end
 

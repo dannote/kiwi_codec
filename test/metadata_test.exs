@@ -7,7 +7,7 @@ defmodule KiwiCodec.MetadataTest do
     field(:session_id, 1, type: :uint, source_name: "sessionID")
   end
 
-  test "field props preserve source schema names" do
+  test "field metadata preserves source schema names" do
     field = Node.__kiwi_props__().fields_by_name.session_id
 
     assert field.name == :session_id

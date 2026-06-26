@@ -6,7 +6,9 @@ defmodule KiwiCodec.Encoder do
   the public API or generated module `encode/1` functions.
   """
 
-  alias KiwiCodec.{FieldProps, MessageProps, Wire}
+  alias KiwiCodec.Metadata
+  alias KiwiCodec.Metadata.Field
+  alias KiwiCodec.Wire
   alias KiwiCodec.Wire.Varint
 
   @spec encode_to_iodata(struct(), module()) :: iodata()
@@ -16,15 +18,15 @@ defmodule KiwiCodec.Encoder do
     |> encode_with_props(module.__kiwi_props__())
   end
 
-  defp encode_with_props(struct, %MessageProps{kind: :message, ordered_fields: fields}) do
+  defp encode_with_props(struct, %Metadata{kind: :message, ordered_fields: fields}) do
     [Enum.map(fields, &encode_message_field(&1, struct)), Varint.encode_uint(0)]
   end
 
-  defp encode_with_props(struct, %MessageProps{kind: :struct, ordered_fields: fields}) do
+  defp encode_with_props(struct, %Metadata{kind: :struct, ordered_fields: fields}) do
     Enum.map(fields, &encode_required_field(&1, struct))
   end
 
-  defp encode_message_field(%FieldProps{name: name} = field, struct) do
+  defp encode_message_field(%Field{name: name} = field, struct) do
     value = Map.fetch!(struct, name)
 
     if is_nil(value) do
@@ -37,7 +39,7 @@ defmodule KiwiCodec.Encoder do
       raise_encode_field_error(struct.__struct__, field, error)
   end
 
-  defp encode_required_field(%FieldProps{name: name} = field, struct) do
+  defp encode_required_field(%Field{name: name} = field, struct) do
     value = Map.fetch!(struct, name)
 
     if is_nil(value) do
@@ -50,16 +52,16 @@ defmodule KiwiCodec.Encoder do
       raise_encode_field_error(struct.__struct__, field, error)
   end
 
-  defp encode_field_value(%FieldProps{repeated?: true, type: :byte}, value)
+  defp encode_field_value(%Field{repeated?: true, type: :byte}, value)
        when is_binary(value) do
     Wire.encode_byte_array(value)
   end
 
-  defp encode_field_value(%FieldProps{repeated?: true} = field, values) when is_list(values) do
+  defp encode_field_value(%Field{repeated?: true} = field, values) when is_list(values) do
     [Varint.encode_uint(length(values)), Enum.map(values, &encode_scalar(field.type, &1))]
   end
 
-  defp encode_field_value(%FieldProps{} = field, value) do
+  defp encode_field_value(%Field{} = field, value) do
     encode_scalar(field.type, value)
   end
 

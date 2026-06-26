@@ -6,7 +6,9 @@ defmodule KiwiCodec.Decoder do
   the public API or generated module `decode/1` functions.
   """
 
-  alias KiwiCodec.{FieldProps, MessageProps, Wire}
+  alias KiwiCodec.Metadata
+  alias KiwiCodec.Metadata.Field
+  alias KiwiCodec.Wire
   alias KiwiCodec.Wire.Varint
 
   @spec decode(binary(), module()) :: struct()
@@ -23,14 +25,14 @@ defmodule KiwiCodec.Decoder do
   defp decode_from_module(binary, module) do
     {value, rest} =
       case module.__kiwi_props__() do
-        %MessageProps{kind: :message} = props -> decode_message(binary, struct(module), props)
-        %MessageProps{kind: :struct} = props -> decode_struct(binary, struct(module), props)
+        %Metadata{kind: :message} = metadata -> decode_message(binary, struct(module), metadata)
+        %Metadata{kind: :struct} = metadata -> decode_struct(binary, struct(module), metadata)
       end
 
     {transform(value, module), rest}
   end
 
-  defp decode_message(binary, struct, %MessageProps{fields_by_id: fields_by_id} = props) do
+  defp decode_message(binary, struct, %Metadata{fields_by_id: fields_by_id} = metadata) do
     {field_id, rest} = Varint.decode_uint(binary)
 
     case field_id do
@@ -40,11 +42,11 @@ defmodule KiwiCodec.Decoder do
       id ->
         field = Map.get(fields_by_id, id) || raise_unknown_field(struct, id)
         {value, tail} = decode_field_value(rest, field, struct.__struct__)
-        decode_message(tail, Map.put(struct, field.name, value), props)
+        decode_message(tail, Map.put(struct, field.name, value), metadata)
     end
   end
 
-  defp decode_struct(binary, struct, %MessageProps{ordered_fields: fields}) do
+  defp decode_struct(binary, struct, %Metadata{ordered_fields: fields}) do
     decode_struct_fields(fields, struct, binary, struct.__struct__)
   end
 
@@ -55,23 +57,23 @@ defmodule KiwiCodec.Decoder do
     decode_struct_fields(fields, Map.put(struct, field.name, value), rest, module)
   end
 
-  defp decode_field_value(binary, %FieldProps{} = field, module) do
+  defp decode_field_value(binary, %Field{} = field, module) do
     do_decode_field_value(binary, field)
   rescue
     error in [KiwiCodec.DecodeError, ArgumentError, FunctionClauseError, MatchError] ->
       raise_decode_field_error(module, field, error)
   end
 
-  defp do_decode_field_value(binary, %FieldProps{repeated?: true, type: :byte}) do
+  defp do_decode_field_value(binary, %Field{repeated?: true, type: :byte}) do
     Wire.decode_byte_array(binary)
   end
 
-  defp do_decode_field_value(binary, %FieldProps{repeated?: true} = field) do
+  defp do_decode_field_value(binary, %Field{repeated?: true} = field) do
     {length, rest} = Varint.decode_uint(binary)
     decode_repeated(length, field.type, rest, [])
   end
 
-  defp do_decode_field_value(binary, %FieldProps{} = field) do
+  defp do_decode_field_value(binary, %Field{} = field) do
     decode_scalar(field.type, binary)
   end
 
