@@ -8,7 +8,6 @@ defmodule KiwiCodec.Schema.Binary do
   alias KiwiCodec.Wire
   alias KiwiCodec.Wire.Varint
 
-  @types ["bool", "byte", "int", "uint", "float", "string", "int64", "uint64"]
   @kinds [:enum, :struct, :message]
   @kinds_tuple List.to_tuple(@kinds)
   @kind_count tuple_size(@kinds_tuple)
@@ -75,7 +74,7 @@ defmodule KiwiCodec.Schema.Binary do
   end
 
   defp encode_field(field, definition_index) do
-    type_index = Enum.find_index(@types, &(&1 == field.type))
+    type_index = KiwiCodec.PrimitiveType.binary_schema_index(field.type)
 
     encoded_type =
       cond do
@@ -132,7 +131,7 @@ defmodule KiwiCodec.Schema.Binary do
 
   defp bind_type!(%Field{type: type} = field, _definitions) when is_integer(type) and type < 0 do
     index = Bitwise.bnot(type)
-    %{field | type: Enum.fetch!(@types, index)}
+    %{field | type: KiwiCodec.PrimitiveType.binary_schema_name!(index)}
   end
 
   defp bind_type!(%Field{type: type} = field, definitions) when is_integer(type) do

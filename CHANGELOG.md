@@ -10,6 +10,7 @@
 - Rename generated Elixir source rendering from `KiwiCodec.Generator` to `KiwiCodec.ModuleGenerator`.
 - Clarify generated-codec and runtime helper names around definitions, wire fields, and wire types.
 - Replace caller-owned Rustler templates with `KiwiCodec.RustlerGenerator.source/2` for complete generated Rust source.
+- Centralize Kiwi primitive type metadata in `KiwiCodec.PrimitiveType`.
 
 ## v0.1.1 - 2026-06-25
 

@@ -73,12 +73,13 @@ defmodule KiwiCodec.Encoder do
   defp encode_wire_type({:enum, _module}, value) when is_integer(value),
     do: Varint.encode_uint(value)
 
-  defp encode_wire_type(type, value)
-       when type in [:bool, :byte, :float, :int, :int64, :string, :uint, :uint64],
-       do: Wire.encode(type, value)
-
-  defp encode_wire_type(module, %module{} = value) when is_atom(module),
-    do: encode_to_iodata(value, module)
+  defp encode_wire_type(type, value) when is_atom(type) do
+    if KiwiCodec.PrimitiveType.atom?(type) do
+      Wire.encode(type, value)
+    else
+      encode_to_iodata(value, type)
+    end
+  end
 
   defp encode_wire_type(type, value) do
     raise KiwiCodec.EncodeError, message: "invalid #{inspect(value)} for type #{inspect(type)}"

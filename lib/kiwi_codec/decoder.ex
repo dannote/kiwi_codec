@@ -89,12 +89,13 @@ defmodule KiwiCodec.Decoder do
     {module.key(value), rest}
   end
 
-  defp decode_wire_type(type, binary)
-       when type in [:bool, :byte, :float, :int, :int64, :string, :uint, :uint64],
-       do: Wire.decode(type, binary)
-
-  defp decode_wire_type(module, binary) when is_atom(module),
-    do: decode_from_module(binary, module)
+  defp decode_wire_type(type, binary) when is_atom(type) do
+    if KiwiCodec.PrimitiveType.atom?(type) do
+      Wire.decode(type, binary)
+    else
+      decode_from_module(binary, type)
+    end
+  end
 
   defp transform(message, module) do
     case module.transform_module() do

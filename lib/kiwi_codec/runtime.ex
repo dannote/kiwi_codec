@@ -11,8 +11,6 @@ defmodule KiwiCodec.Runtime do
   alias KiwiCodec.Wire
   alias KiwiCodec.Wire.Varint
 
-  @primitive_types ~w(bool byte float int int64 string uint uint64)
-
   @spec decode(Schema.t(), String.t(), binary()) :: map() | String.t() | integer()
   def decode(%Schema{} = schema, definition_name, binary) do
     {value, rest} = decode_definition(schema, definition!(schema, definition_name), binary)
@@ -82,12 +80,12 @@ defmodule KiwiCodec.Runtime do
 
   defp decode_wire_field(schema, field, binary), do: decode_wire_type(schema, field.type, binary)
 
-  defp decode_wire_type(_schema, type, binary) when type in @primitive_types do
-    Wire.decode(String.to_existing_atom(type), binary)
-  end
-
   defp decode_wire_type(schema, type, binary) do
-    decode_definition(schema, definition!(schema, type), binary)
+    if KiwiCodec.PrimitiveType.name?(type) do
+      Wire.decode(KiwiCodec.PrimitiveType.to_atom!(type), binary)
+    else
+      decode_definition(schema, definition!(schema, type), binary)
+    end
   end
 
   defp encode_definition(schema, %Definition{kind: :message} = definition, value)
@@ -143,12 +141,12 @@ defmodule KiwiCodec.Runtime do
 
   defp encode_wire_field(schema, field, value), do: encode_wire_type(schema, field.type, value)
 
-  defp encode_wire_type(_schema, type, value) when type in @primitive_types do
-    Wire.encode(String.to_existing_atom(type), value)
-  end
-
   defp encode_wire_type(schema, type, value) do
-    encode_definition(schema, definition!(schema, type), value)
+    if KiwiCodec.PrimitiveType.name?(type) do
+      Wire.encode(KiwiCodec.PrimitiveType.to_atom!(type), value)
+    else
+      encode_definition(schema, definition!(schema, type), value)
+    end
   end
 
   defp definition!(schema, name) do

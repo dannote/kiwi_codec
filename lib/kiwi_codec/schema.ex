@@ -9,10 +9,8 @@ defmodule KiwiCodec.Schema do
 
   defstruct package: nil, definitions: []
 
-  @native_types ~w(bool byte float int int64 string uint uint64)
-
   @spec native_type?(String.t()) :: boolean()
-  def native_type?(type), do: type in @native_types
+  def native_type?(type), do: KiwiCodec.PrimitiveType.name?(type)
 
   @spec definition(t(), String.t()) :: Definition.t() | nil
   def definition(%__MODULE__{definitions: definitions}, name) do

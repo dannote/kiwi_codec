@@ -6,17 +6,6 @@ defmodule KiwiCodec.ModuleGenerator do
   alias KiwiCodec.Schema
   alias KiwiCodec.Schema.Definition
 
-  @primitive_type_atoms %{
-    "bool" => :bool,
-    "byte" => :byte,
-    "float" => :float,
-    "int" => :int,
-    "int64" => :int64,
-    "string" => :string,
-    "uint" => :uint,
-    "uint64" => :uint64
-  }
-
   @spec generate(Schema.t(), keyword()) :: [{Path.t(), String.t()}]
   def generate(%Schema{} = schema, opts) do
     module_prefix = Keyword.fetch!(opts, :module_prefix)
@@ -92,11 +81,15 @@ defmodule KiwiCodec.ModuleGenerator do
     |> maybe_put(:deprecated, field.deprecated?)
   end
 
-  defp field_type(_schema, type, _prefix) when is_map_key(@primitive_type_atoms, type) do
-    Map.fetch!(@primitive_type_atoms, type)
+  defp field_type(schema, type, prefix) do
+    if KiwiCodec.PrimitiveType.name?(type) do
+      KiwiCodec.PrimitiveType.to_atom!(type)
+    else
+      schema_type(schema, type, prefix)
+    end
   end
 
-  defp field_type(schema, type, prefix) do
+  defp schema_type(schema, type, prefix) do
     case Schema.definition(schema, type) do
       %Definition{kind: :enum} -> {:enum, Module.concat([prefix, type])}
       %Definition{} -> Module.concat([prefix, type])
