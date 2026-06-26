@@ -9,6 +9,7 @@
 - Split Rustler generator naming, selection, helper splice, and decoder macro concerns into dedicated modules.
 - Rename generated Elixir source rendering from `KiwiCodec.Generator` to `KiwiCodec.ModuleGenerator`.
 - Clarify generated-codec and runtime helper names around definitions, wire fields, and wire types.
+- Replace caller-owned Rustler templates with `KiwiCodec.RustlerGenerator.source/2` for complete generated Rust source.
 
 ## v0.1.1 - 2026-06-25
 

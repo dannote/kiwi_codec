@@ -91,8 +91,9 @@ schema = KiwiCodec.Schema.Binary.decode(binary_schema)
 
 ## Rustler decoder generation
 
-`KiwiCodec.RustlerGenerator.splices/2` returns RustQ splice groups for native
-Rustler decoders. Use it from `rustq.exs` and let `mix rustq.gen` own rendering:
+`KiwiCodec.RustlerGenerator.source/2` returns complete generated Rust source for
+native Rustler decoders. Use it from `rustq.exs` and let `mix rustq.gen` own
+writing and freshness checks:
 
 ```elixir
 use RustQ.Config
@@ -100,21 +101,18 @@ use RustQ.Config
 schema = KiwiCodec.parse_schema!(File.read!("priv/schema.kiwi"))
 
 generate :native_decoders, "native/my_nif/src/generated.rs" do
-  render File.read!("native/my_nif/src/generated.template.rs"),
-    filename: "native/my_nif/src/generated.template.rs",
-    include_dir: "native/my_nif/src",
-    splice: KiwiCodec.RustlerGenerator.splices(schema,
-      definitions: ["Node"],
-      entrypoints: [decode_node: "Node"],
-      module_prefix: "MyApp.Schema"
-    )
+  content KiwiCodec.RustlerGenerator.source(schema,
+    definitions: ["Node"],
+    entrypoints: [decode_node: "Node"],
+    module_prefix: "MyApp.Schema"
+  )
 end
 ```
 
-The Rust template must define the shared Rustler imports, `std::sync::OnceLock`,
-and a Kiwi `Decoder`. RustQ-provided atom and struct helpers are inserted with
-`__rq_rustler_helpers!();`, generated definitions with `__rq_definitions!();`,
-and NIF entrypoints with `__rq_entrypoints!();`.
+The generated file includes Rustler imports, RustQ-provided atom/struct helpers,
+schema decoders, and requested NIF entrypoints. The native crate must provide the
+Kiwi `Decoder` type used by the generated code; by default it is imported from
+`crate::runtime::Decoder`, or pass `decoder: "some::path::Decoder"`.
 
 ## Containers
 
