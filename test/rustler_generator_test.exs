@@ -158,7 +158,15 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     refute generated =~ "fn decode_sparse_message"
   end
 
-  test "infers entrypoints from a NIF stub source file without loading the module" do
+  defmodule NativeStubMetadata do
+    @moduledoc "Test NIF stub metadata module used for Rustler generator entrypoint inference."
+
+    @stubs [decode_node: 1, decode_image: 1, decode_sparse_message: 1]
+
+    def stubs, do: @stubs
+  end
+
+  test "infers entrypoints from an explicit NIF stub metadata module" do
     schema_source = """
     struct Node {
       uint id;
@@ -169,21 +177,9 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     }
     """
 
-    dir = Path.join(System.tmp_dir!(), "kiwi-nif-stubs-#{System.unique_integer([:positive])}")
-    File.mkdir_p!(dir)
-    on_exit(fn -> File.rm_rf(dir) end)
-
-    stubs_path = Path.join(dir, "nif.ex")
-
-    File.write!(stubs_path, """
-    defmodule Example.Nif do
-      @stubs [decode_node: 1, decode_image: 1, decode_sparse_message: 1]
-    end
-    """)
-
     {generated, _config} =
       generate_with_rustq_gen!(schema_source,
-        entrypoints: {:nif_stubs, stubs_path},
+        entrypoints: {:nif_stubs, NativeStubMetadata},
         module_prefix: "Example.Schema"
       )
 

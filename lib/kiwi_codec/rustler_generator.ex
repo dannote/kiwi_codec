@@ -39,12 +39,12 @@ defmodule KiwiCodec.RustlerGenerator do
     * `:definitions` - schema definition names to generate, including their
       dependencies. Defaults to the requested entrypoint definitions, or all
       definitions when no entrypoints are requested.
-    * `:entrypoints` - `:all`, `{:nif_stubs, path}`, a NIF stub module,
+    * `:entrypoints` - `:all`, `{:nif_stubs, module}`, a NIF stub module,
       definition names, or `{nif_name, definition_name}` entries for generated
       NIFs. Definition names infer `decode_<definition_name>` NIFs. `:all`
       generates one inferred NIF for every schema definition. A NIF stub module
-      or stub source file infers entries from one-arity `decode_*` functions whose
-      suffix matches a schema definition.
+      infers entries from one-arity `decode_*` stubs whose suffix matches a schema
+      definition. For `{:nif_stubs, module}`, the module must expose `stubs/0`.
     * `:module_prefix` - Elixir module prefix for decoded structs.
     * `:decoder` - Rust path imported as `Decoder`. Defaults to
       `"crate::runtime::Decoder"`.
@@ -79,10 +79,14 @@ defmodule KiwiCodec.RustlerGenerator do
     |> normalize_entrypoints(schema)
   end
 
-  defp normalize_entrypoints({:nif_stubs, path}, %Schema{} = schema) do
-    path
-    |> nif_stub_exports_from_file!()
-    |> entrypoints_from_exports(schema)
+  defp normalize_entrypoints({:nif_stubs, module}, %Schema{} = schema) when is_atom(module) do
+    Code.ensure_loaded!(module)
+
+    unless function_exported?(module, :stubs, 0) do
+      raise ArgumentError, "expected #{inspect(module)} to expose stubs/0"
+    end
+
+    module.stubs() |> entrypoints_from_exports(schema)
   end
 
   defp normalize_entrypoints(module, %Schema{} = schema) when is_atom(module) do
@@ -106,26 +110,6 @@ defmodule KiwiCodec.RustlerGenerator do
       _export -> []
     end)
     |> Enum.sort_by(fn {nif_name, _definition_name} -> to_string(nif_name) end)
-  end
-
-  defp nif_stub_exports_from_file!(path) do
-    path
-    |> File.read!()
-    |> Code.string_to_quoted!()
-    |> stubs_attribute!()
-  end
-
-  defp stubs_attribute!(ast) do
-    {_ast, attributes} =
-      Macro.prewalk(ast, [], fn
-        {:@, _meta, [{:stubs, _attr_meta, [stubs]}]} = node, acc -> {node, [stubs | acc]}
-        node, acc -> {node, acc}
-      end)
-
-    case attributes do
-      [stubs | _rest] when is_list(stubs) -> stubs
-      _other -> raise ArgumentError, "expected @stubs keyword list in NIF stub source"
-    end
   end
 
   defp entrypoint_from_export(name, definitions_by_underscore) do
