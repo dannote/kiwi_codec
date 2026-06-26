@@ -20,6 +20,7 @@
 - Split generated-module metadata, shape, and typespec emission out of `KiwiCodec.DSL`.
 - Split schema tokenization and validation out of `KiwiCodec.Schema.Parser`.
 - Group published HexDocs modules without hiding source documentation.
+- Refresh README installation instructions for the latest released version.
 
 ## v0.1.1 - 2026-06-25
 

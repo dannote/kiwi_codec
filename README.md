@@ -141,7 +141,7 @@ Once published, add it to your dependencies:
 ```elixir
 def deps do
   [
-    {:kiwi_codec, "~> 0.1.0"}
+    {:kiwi_codec, "~> 0.1.1"}
   ]
 end
 ```
