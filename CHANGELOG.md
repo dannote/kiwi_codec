@@ -17,6 +17,7 @@
 - Replace overloaded parsed schema definitions with `KiwiCodec.Schema.Enum`, `KiwiCodec.Schema.Struct`, and `KiwiCodec.Schema.Message`.
 - Extract compact binary schema type-reference encoding into `KiwiCodec.Schema.Binary.TypeIndex`.
 - Split Rustler generator definition emission, field expressions, and entrypoints into dedicated modules.
+- Split generated-module metadata, shape, and typespec emission out of `KiwiCodec.DSL`.
 
 ## v0.1.1 - 2026-06-25
 
