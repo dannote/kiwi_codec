@@ -97,20 +97,125 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
         };
     }
 
+    type KiwiSkipFn = fn(&mut Decoder<'_>) -> NifResult<()>;
+
+    enum KiwiSkipKind {
+        One(KiwiSkipFn),
+        Repeated(KiwiSkipFn),
+        Bytes,
+    }
+
+    struct KiwiSkipField {
+        id: u32,
+        kind: KiwiSkipKind,
+    }
+
+    fn kiwi_skip_bool_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.read_bool()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_byte_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.read_byte()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_float_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.read_var_float_value()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_int_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.read_var_int()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_int64_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.read_var_int64()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_string_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.skip_string()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_uint_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.read_var_uint()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_uint64_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.read_var_uint64()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_bytes_value(decoder: &mut Decoder<'_>) -> NifResult<()> {
+        decoder.skip_byte_array()?;
+        Ok(())
+    }
+
+    fn kiwi_skip_repeated(decoder: &mut Decoder<'_>, item: KiwiSkipFn) -> NifResult<()> {
+        decoder.read_repeated(|decoder| item(decoder))?;
+        Ok(())
+    }
+
+    fn kiwi_skip_kind(decoder: &mut Decoder<'_>, kind: &KiwiSkipKind) -> NifResult<()> {
+        match kind {
+            KiwiSkipKind::One(skip) => skip(decoder),
+            KiwiSkipKind::Repeated(skip) => kiwi_skip_repeated(decoder, *skip),
+            KiwiSkipKind::Bytes => kiwi_skip_bytes_value(decoder),
+        }
+    }
+
+    fn kiwi_skip_struct_fields(decoder: &mut Decoder<'_>, fields: &[KiwiSkipKind]) -> NifResult<()> {
+        for kind in fields {
+            kiwi_skip_kind(decoder, kind)?;
+        }
+        Ok(())
+    }
+
+    fn kiwi_skip_message_fields(
+        decoder: &mut Decoder<'_>,
+        definition_name: &str,
+        fields: &[KiwiSkipField],
+    ) -> NifResult<()> {
+        loop {
+            match decoder.read_var_uint()? {
+                0 => break,
+                field_id => match fields.iter().find(|field| field.id == field_id) {
+                    Some(field) => kiwi_skip_kind(decoder, &field.kind)?,
+                    None => {
+                        return Err(Error::Term(Box::new(format!(
+                            "unknown field {} while skipping {}",
+                            field_id,
+                            definition_name
+                        ))));
+                    }
+                },
+            }
+        }
+        Ok(())
+    }
+
     macro_rules! kiwi_skip_enum_decoder {
         (fn $name:ident; decoder $decoder:ident;) => {
             fn $name($decoder: &mut Decoder<'_>) -> NifResult<()> {
-                $decoder.read_var_uint()?;
-                Ok(())
+                kiwi_skip_uint_value($decoder)
             }
         };
     }
 
+    macro_rules! kiwi_skip_kind {
+        (one $skip:ident) => { KiwiSkipKind::One($skip) };
+        (repeated $skip:ident) => { KiwiSkipKind::Repeated($skip) };
+        (bytes $skip:ident) => { KiwiSkipKind::Bytes };
+    }
+
     macro_rules! kiwi_skip_struct_decoder {
-        (fn $name:ident; decoder $decoder:ident; fields [$($field_expr:expr;)*]) => {
+        (fn $name:ident; decoder $decoder:ident; fields [$($field_mode:ident $field_skip:ident;)*]) => {
             fn $name($decoder: &mut Decoder<'_>) -> NifResult<()> {
-                $($field_expr;)*
-                Ok(())
+                kiwi_skip_struct_fields($decoder, &[$(kiwi_skip_kind!($field_mode $field_skip),)*])
             }
         };
     }
@@ -120,25 +225,14 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
             fn $name:ident;
             decoder $decoder:ident;
             definition $definition_name:literal;
-            fields [$($field_id:literal => $field_expr:expr;)*]
+            fields [$($field_id:literal => $field_mode:ident $field_skip:ident;)*]
         ) => {
             fn $name($decoder: &mut Decoder<'_>) -> NifResult<()> {
-                loop {
-                    match $decoder.read_var_uint()? {
-                        0 => break,
-                        $(
-                            $field_id => { $field_expr; }
-                        )*
-                        field => {
-                            return Err(Error::Term(Box::new(format!(
-                                "unknown field {} while skipping {}",
-                                field,
-                                $definition_name
-                            ))));
-                        }
-                    }
-                }
-                Ok(())
+                kiwi_skip_message_fields(
+                    $decoder,
+                    $definition_name,
+                    &[$(KiwiSkipField { id: $field_id, kind: kiwi_skip_kind!($field_mode $field_skip) },)*],
+                )
             }
         };
     }

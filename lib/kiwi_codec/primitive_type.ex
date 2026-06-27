@@ -7,7 +7,9 @@ defmodule KiwiCodec.PrimitiveType do
   indexes.
   """
 
-  @binary_schema_names ["bool", "byte", "int", "uint", "float", "string", "int64", "uint64"]
+  @binary_schema_atoms [:bool, :byte, :int, :uint, :float, :string, :int64, :uint64]
+  @binary_schema_names Enum.map(@binary_schema_atoms, &Atom.to_string/1)
+  @name_to_atom Map.new(Enum.zip(@binary_schema_names, @binary_schema_atoms))
 
   @type name :: String.t()
   @type atom_name :: atom()
@@ -37,7 +39,7 @@ defmodule KiwiCodec.PrimitiveType do
   def names, do: @binary_schema_names
 
   @spec atoms() :: [atom_name()]
-  def atoms, do: Enum.map(names(), &String.to_existing_atom/1)
+  def atoms, do: @binary_schema_atoms
 
-  defp name_to_atom, do: Map.new(names(), &{&1, String.to_existing_atom(&1)})
+  defp name_to_atom, do: @name_to_atom
 end

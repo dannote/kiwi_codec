@@ -221,6 +221,10 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     assert generated =~ "fn decode_sparse_image_from_decoder"
     assert generated =~ "kiwi_skip_message_decoder!"
     assert generated =~ "fn skip_image_from_decoder"
+    assert generated =~ "1 => bytes kiwi_skip_bytes_value;"
+    assert generated =~ "2 => one kiwi_skip_string_value;"
+    assert generated =~ "3 => one skip_point_from_decoder;"
+    assert generated =~ "one kiwi_skip_float_value;"
     refute generated =~ "fn decode_image_from_decoder<'a>"
   end
 
