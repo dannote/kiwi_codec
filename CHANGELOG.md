@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.2.1 - 2026-06-26
+
+- Generate Rustler decoders through shared Rust macros to reduce repeated generated source.
+- Add generic Rustler sparse and skip decoder families for projection-oriented native backends.
+
 ## v0.2.0 - 2026-06-26
 
 - Delegate LEB128/ZigZag integer encoding to the `varint` package while keeping Kiwi-specific range and error handling.

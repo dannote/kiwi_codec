@@ -3,11 +3,10 @@ defmodule KiwiCodec.RustlerGenerator.Definition do
   Generates Rust items for Kiwi schema definitions.
   """
 
-  alias KiwiCodec.RustlerGenerator.FieldExpr
   alias KiwiCodec.RustlerGenerator.Name
+  alias KiwiCodec.RustlerGenerator.RustExpr
   alias KiwiCodec.Schema.Enum, as: SchemaEnum
   alias KiwiCodec.Schema.{Message, Struct}
-  alias RustQ.Meta.AST, as: MetaAST
   alias RustQ.Rust
   alias RustQ.Rust.AST.Builder, as: A
 
@@ -41,8 +40,7 @@ defmodule KiwiCodec.RustlerGenerator.Definition do
     [
       atom_static(Name.module_atom_static(definition.name)),
       keys_static(Name.struct_keys_static(definition.name)),
-      message_decoder_item(definition, module_prefix, definition_map),
-      message_fields_decoder_item(definition, module_prefix, definition_map)
+      message_decoder_item(definition, module_prefix, definition_map)
     ]
   end
 
@@ -57,153 +55,132 @@ defmodule KiwiCodec.RustlerGenerator.Definition do
   end
 
   defp enum_decoder_item(%SchemaEnum{} = definition) do
-    definition
-    |> generated_enum_module!()
-    |> MetaAST.item(Name.decoder_function(definition.name))
-  end
+    variants =
+      definition.variants
+      |> Enum.with_index()
+      |> Enum.map(fn {field, index} ->
+        [
+          Integer.to_string(field.value),
+          " => ",
+          RustExpr.ident(Name.enum_variant_atom_static(definition.name, index)),
+          ", ",
+          inspect(Name.field_name(field.name)),
+          ";"
+        ]
+      end)
+      |> Enum.intersperse("\n")
 
-  defp generated_enum_module!(%SchemaEnum{} = definition) do
-    module =
-      Module.concat([
-        KiwiCodec.RustlerGenerator.Generated,
-        "Enum#{definition.name}#{:erlang.phash2(definition)}"
-      ])
-
-    if Code.ensure_loaded?(module) do
-      module
-    else
-      variants =
-        definition.variants
-        |> Enum.with_index()
-        |> Enum.map(fn {field, index} ->
-          {
-            field.value,
-            Name.static_alias(Name.enum_variant_atom_static(definition.name, index)),
-            Name.field_name(field.name)
-          }
-        end)
-
-      name = Name.decoder_function(definition.name)
-
-      Module.create(
-        module,
-        quote do
-          use RustQ.Meta
-          alias RustQ.Type, as: R
-          import KiwiCodec.RustlerGenerator.DecoderMacro, only: [enum_decoder: 2]
-
-          enum_decoder(
-            unquote(name),
-            unquote(Macro.escape(variants))
-          )
-        end,
-        Macro.Env.location(__ENV__)
-      )
-
-      module
-    end
+    Rust.item([
+      "kiwi_enum_decoder! {\n",
+      "    fn ",
+      RustExpr.ident(Name.decoder_function(definition.name)),
+      ";\n",
+      "    variants [\n",
+      RustExpr.indent(variants, 8),
+      "\n    ]\n",
+      "}"
+    ])
   end
 
   defp struct_decoder_item(%Struct{} = definition, module_prefix, definition_map) do
-    definition
-    |> generated_struct_module!(module_prefix, definition_map)
-    |> MetaAST.item(Name.decoder_function(definition.name))
-  end
+    field_exprs = Enum.map(definition.fields, &field_expr(&1, definition_map))
 
-  defp generated_struct_module!(%Struct{} = definition, module_prefix, definition_map) do
-    module =
-      Module.concat([
-        KiwiCodec.RustlerGenerator.Generated,
-        "Struct#{definition.name}#{:erlang.phash2({definition, module_prefix})}"
-      ])
-
-    if Code.ensure_loaded?(module) do
-      module
-    else
-      name = Name.decoder_function(definition.name)
-      field_exprs = Enum.map(definition.fields, &FieldExpr.build(&1, definition_map))
-
-      Module.create(
-        module,
-        quote do
-          use RustQ.Meta
-          alias RustQ.Type, as: R
-          import KiwiCodec.RustlerGenerator.DecoderMacro, only: [struct_decoder: 6]
-
-          struct_decoder(
-            unquote(name),
-            unquote(Name.module_atom_static(definition.name)),
-            unquote(Name.struct_keys_static(definition.name)),
-            unquote(Name.module_name(module_prefix, definition.name)),
-            unquote(Enum.map(definition.fields, &Name.field_name(&1.name))),
-            unquote(Macro.escape(field_exprs))
-          )
-        end,
-        Macro.Env.location(__ENV__)
-      )
-
-      module
-    end
+    Rust.item([
+      "kiwi_struct_decoder! {\n",
+      "    fn ",
+      RustExpr.ident(Name.decoder_function(definition.name)),
+      ";\n",
+      "    env env;\n",
+      "    decoder decoder;\n",
+      "    module_static ",
+      RustExpr.ident(Name.module_atom_static(definition.name)),
+      ";\n",
+      "    keys_static ",
+      RustExpr.ident(Name.struct_keys_static(definition.name)),
+      ";\n",
+      "    module ",
+      inspect(Name.module_name(module_prefix, definition.name)),
+      ";\n",
+      "    keys [",
+      key_list(definition.fields),
+      "];\n",
+      "    fields [\n",
+      RustExpr.indent(Enum.intersperse(field_exprs, ",\n"), 8),
+      "\n    ]\n",
+      "}"
+    ])
   end
 
   defp message_decoder_item(%Message{} = definition, module_prefix, definition_map) do
-    definition
-    |> generated_message_module!(module_prefix, definition_map)
-    |> MetaAST.item(Name.decoder_function(definition.name))
+    field_entries =
+      definition.fields
+      |> Enum.with_index()
+      |> Enum.map(fn {field, index} ->
+        [
+          Integer.to_string(field.id),
+          " => ",
+          Integer.to_string(index + 1),
+          ": ",
+          field_expr(field, definition_map),
+          ";"
+        ]
+      end)
+      |> Enum.intersperse("\n")
+
+    Rust.item([
+      "kiwi_message_decoder! {\n",
+      "    fn ",
+      RustExpr.ident(Name.decoder_function(definition.name)),
+      ";\n",
+      "    fields_fn ",
+      RustExpr.ident(Name.message_fields_function(definition.name)),
+      ";\n",
+      "    env env;\n",
+      "    decoder decoder;\n",
+      "    module_static ",
+      RustExpr.ident(Name.module_atom_static(definition.name)),
+      ";\n",
+      "    keys_static ",
+      RustExpr.ident(Name.struct_keys_static(definition.name)),
+      ";\n",
+      "    module ",
+      inspect(Name.module_name(module_prefix, definition.name)),
+      ";\n",
+      "    keys [",
+      key_list(definition.fields),
+      "];\n",
+      "    fields [\n",
+      RustExpr.indent(field_entries, 8),
+      "\n    ]\n",
+      "}"
+    ])
   end
 
-  defp message_fields_decoder_item(%Message{} = definition, module_prefix, definition_map) do
-    definition
-    |> generated_message_module!(module_prefix, definition_map)
-    |> MetaAST.item(Name.message_fields_function(definition.name))
+  defp field_expr(%{array?: true, type: "byte"}, _definition_map) do
+    "decoder.read_byte_array(env)?"
   end
 
-  defp generated_message_module!(%Message{} = definition, module_prefix, definition_map) do
-    module =
-      Module.concat([
-        KiwiCodec.RustlerGenerator.Generated,
-        "Message#{definition.name}#{:erlang.phash2({definition, module_prefix})}"
-      ])
+  defp field_expr(%{array?: true} = field, definition_map) do
+    inner = field_expr(%{field | array?: false}, definition_map)
+    ["decoder.read_repeated(|decoder| Ok(", inner, "))?"]
+  end
 
-    if Code.ensure_loaded?(module) do
-      module
-    else
-      decoder_name = Name.decoder_function(definition.name)
-      fields_name = Name.message_fields_function(definition.name)
+  defp field_expr(%{type: type}, definition_map) do
+    case RustExpr.primitive(type) do
+      nil ->
+        [
+          RustExpr.ident(Name.decoder_function(Map.fetch!(definition_map, type).name)),
+          "(env, decoder)?"
+        ]
 
-      fields =
-        definition.fields
-        |> Enum.with_index()
-        |> Enum.map(fn {field, index} ->
-          {field.id, index + 1, FieldExpr.build(field, definition_map)}
-        end)
-
-      module_name = Name.module_name(module_prefix, definition.name)
-
-      Module.create(
-        module,
-        quote do
-          use RustQ.Meta
-          alias RustQ.Type, as: R
-
-          import KiwiCodec.RustlerGenerator.DecoderMacro,
-            only: [message_decoder: 6, message_fields_decoder: 2]
-
-          message_decoder(
-            unquote(decoder_name),
-            unquote(fields_name),
-            unquote(Name.module_atom_static(definition.name)),
-            unquote(Name.struct_keys_static(definition.name)),
-            unquote(module_name),
-            unquote(Enum.map(definition.fields, &Name.field_name(&1.name)))
-          )
-
-          message_fields_decoder(unquote(fields_name), unquote(Macro.escape(fields)))
-        end,
-        Macro.Env.location(__ENV__)
-      )
-
-      module
+      expr ->
+        expr
     end
+  end
+
+  defp key_list(fields) do
+    fields
+    |> Enum.map(&(&1.name |> Name.field_name() |> inspect()))
+    |> Enum.intersperse(", ")
   end
 end

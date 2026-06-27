@@ -14,6 +14,8 @@ defmodule KiwiCodec.RustlerGenerator do
   alias KiwiCodec.RustlerGenerator.Definition
   alias KiwiCodec.RustlerGenerator.Entrypoint
   alias KiwiCodec.RustlerGenerator.Selection
+  alias KiwiCodec.RustlerGenerator.Skip
+  alias KiwiCodec.RustlerGenerator.Sparse
   alias KiwiCodec.RustlerGenerator.Splice
   alias KiwiCodec.Schema
   alias RustQ.Rust
@@ -47,6 +49,9 @@ defmodule KiwiCodec.RustlerGenerator do
     * `:module_prefix` - Elixir module prefix for decoded structs.
     * `:decoder` - Rust path imported as `Decoder`. Defaults to
       `"crate::runtime::Decoder"`.
+    * `:features` - decoder families to generate. Defaults to `[:full]`.
+      Use `:sparse` and `:skip` for generic sparse map decoders and skip
+      helpers used by projection-oriented native backends.
 
   """
   @spec source(Schema.t(), keyword()) :: String.t()
@@ -65,11 +70,22 @@ defmodule KiwiCodec.RustlerGenerator do
     definition_map = Selection.definition_map(schema)
     selected = Selection.definitions(schema, definitions, definition_map)
 
+    features = Keyword.get(opts, :features, [:full])
+
     [
       Splice.rustler_helpers(),
-      Definition.fragments(selected, module_prefix, definition_map),
+      feature_fragments(features, selected, module_prefix, definition_map),
       Entrypoint.fragments(entrypoints)
     ]
+  end
+
+  defp feature_fragments(features, selected, module_prefix, definition_map) do
+    Enum.flat_map(features, fn
+      :full -> Definition.fragments(selected, module_prefix, definition_map)
+      :sparse -> Sparse.fragments(selected, module_prefix, definition_map)
+      :skip -> Skip.fragments(selected, definition_map)
+      feature -> raise ArgumentError, "unknown Rustler generator feature #{inspect(feature)}"
+    end)
   end
 
   defp normalize_entrypoints(:all, %Schema{} = schema) do
