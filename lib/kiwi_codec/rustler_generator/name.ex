@@ -25,9 +25,6 @@ defmodule KiwiCodec.RustlerGenerator.Name do
   @spec struct_keys_static(String.t()) :: atom()
   def struct_keys_static(name), do: static_name(name, "STRUCT_KEYS")
 
-  @spec enum_variant_atom_static(String.t(), non_neg_integer()) :: atom()
-  def enum_variant_atom_static(name, index), do: static_name(name, "ATOM_#{index}")
-
   @spec static_alias(atom()) :: Macro.t()
   def static_alias(name), do: {:__aliases__, [], [name]}
 

@@ -18,14 +18,7 @@ defmodule KiwiCodec.RustlerGenerator.Definition do
   end
 
   defp items(%SchemaEnum{} = definition, _module_prefix, _definition_map) do
-    variant_statics =
-      definition.variants
-      |> Enum.with_index()
-      |> Enum.map(fn {_field, index} ->
-        atom_static(Name.enum_variant_atom_static(definition.name, index))
-      end)
-
-    variant_statics ++ [enum_decoder_item(definition)]
+    [enum_decoder_item(definition)]
   end
 
   defp items(%Struct{} = definition, module_prefix, definition_map) do
@@ -57,16 +50,8 @@ defmodule KiwiCodec.RustlerGenerator.Definition do
   defp enum_decoder_item(%SchemaEnum{} = definition) do
     variants =
       definition.variants
-      |> Enum.with_index()
-      |> Enum.map(fn {field, index} ->
-        [
-          Integer.to_string(field.value),
-          " => ",
-          RustExpr.ident(Name.enum_variant_atom_static(definition.name, index)),
-          ", ",
-          inspect(Name.field_name(field.name)),
-          ";"
-        ]
+      |> Enum.map(fn field ->
+        [Integer.to_string(field.value), " => ", inspect(Name.field_name(field.name)), ";"]
       end)
       |> Enum.intersperse("\n")
 

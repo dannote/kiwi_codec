@@ -49,16 +49,8 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
        ) do
     variant_entries =
       variants
-      |> Enum.with_index()
-      |> Enum.map(fn {field, index} ->
-        [
-          Integer.to_string(field.value),
-          " => ",
-          enum_static(name, index),
-          ", ",
-          inspect(Macro.underscore(field.name)),
-          ";"
-        ]
+      |> Enum.map(fn field ->
+        [Integer.to_string(field.value), " => ", inspect(Macro.underscore(field.name)), ";"]
       end)
       |> Enum.intersperse("\n")
 
@@ -169,8 +161,6 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
         ["decode_sparse_", RustExpr.ident(type), "_from_decoder(env, decoder)"]
     end
   end
-
-  defp enum_static(name, index), do: "#{String.upcase(Macro.underscore(name))}_ATOM_#{index}"
 
   defp module_name(module_prefix, name), do: "Elixir.#{module_prefix}.#{name}"
 end

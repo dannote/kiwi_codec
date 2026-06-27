@@ -21,12 +21,12 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
     macro_rules! kiwi_enum_decoder {
         (
             fn $name:ident;
-            variants [$($value:literal => $static_name:ident, $atom_name:literal;)*]
+            variants [$($value:literal => $atom_name:literal;)*]
         ) => {
             fn $name<'a>(env: Env<'a>, decoder: &mut Decoder<'_>) -> NifResult<Term<'a>> {
                 match decoder.read_var_uint()? as i64 {
                     $(
-                        $value => Ok(cached_atom(env, &$static_name, $atom_name).encode(env)),
+                        $value => Ok(Atom::from_str(env, $atom_name).unwrap().encode(env)),
                     )*
                     value => Ok(value.encode(env)),
                 }
@@ -243,12 +243,12 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
             fn $name:ident;
             env $env:ident;
             decoder $decoder:ident;
-            variants [$($value:literal => $static_name:ident, $atom_name:literal;)*]
+            variants [$($value:literal => $atom_name:literal;)*]
         ) => {
             fn $name<'a>($env: Env<'a>, $decoder: &mut Decoder<'_>) -> NifResult<Term<'a>> {
                 match $decoder.read_var_uint()? as i64 {
                     $(
-                        $value => Ok(cached_atom($env, &$static_name, $atom_name).encode($env)),
+                        $value => Ok(Atom::from_str($env, $atom_name).unwrap().encode($env)),
                     )*
                     value => Ok(value.encode($env)),
                 }

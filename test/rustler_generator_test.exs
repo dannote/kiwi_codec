@@ -307,7 +307,8 @@ defmodule KiwiCodec.RustlerGeneratorTest do
         module_prefix: "Example.Schema"
       )
 
-    assert generated =~ "static KIND_ATOM_0: OnceLock<Atom> = OnceLock::new();"
+    refute generated =~ "static KIND_ATOM_0: OnceLock<Atom> = OnceLock::new();"
+    assert generated =~ "1 => \"rectangle\";"
     assert generated =~ "static POINT_MODULE_ATOM: OnceLock<Atom> = OnceLock::new();"
     assert generated =~ "static NODE_STRUCT_KEYS: OnceLock<Vec<rustler::wrapper::NIF_TERM>>"
     assert generated =~ "kiwi_enum_decoder!"
