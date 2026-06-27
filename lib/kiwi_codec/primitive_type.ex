@@ -7,21 +7,10 @@ defmodule KiwiCodec.PrimitiveType do
   indexes.
   """
 
-  @types [
-    {"bool", :bool},
-    {"byte", :byte},
-    {"float", :float},
-    {"int", :int},
-    {"int64", :int64},
-    {"string", :string},
-    {"uint", :uint},
-    {"uint64", :uint64}
-  ]
-
   @binary_schema_names ["bool", "byte", "int", "uint", "float", "string", "int64", "uint64"]
 
   @type name :: String.t()
-  @type atom_name :: :bool | :byte | :float | :int | :int64 | :string | :uint | :uint64
+  @type atom_name :: atom()
 
   @spec name?(term()) :: boolean()
   def name?(name) when is_binary(name), do: Map.has_key?(name_to_atom(), name)
@@ -38,14 +27,17 @@ defmodule KiwiCodec.PrimitiveType do
   def binary_schema_index(nil), do: nil
 
   def binary_schema_index(name) when is_binary(name) do
-    Enum.find_index(@binary_schema_names, &(&1 == name))
+    Enum.find_index(names(), &(&1 == name))
   end
 
   @spec binary_schema_name!(non_neg_integer()) :: name()
-  def binary_schema_name!(index), do: Enum.fetch!(@binary_schema_names, index)
+  def binary_schema_name!(index), do: Enum.fetch!(names(), index)
+
+  @spec names() :: [name()]
+  def names, do: @binary_schema_names
 
   @spec atoms() :: [atom_name()]
-  def atoms, do: Enum.map(@types, &elem(&1, 1))
+  def atoms, do: Enum.map(names(), &String.to_existing_atom/1)
 
-  defp name_to_atom, do: Map.new(@types)
+  defp name_to_atom, do: Map.new(names(), &{&1, String.to_existing_atom(&1)})
 end

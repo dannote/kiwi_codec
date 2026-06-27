@@ -4,29 +4,9 @@ defmodule KiwiCodec.RustlerGenerator.FieldExpr do
   """
 
   alias KiwiCodec.RustlerGenerator.Name
+  alias KiwiCodec.RustlerGenerator.RustExpr
 
-  @primitive_decoders [
-    {"bool", :read_bool, []},
-    {"byte", :read_byte, []},
-    {"float", :read_var_float, [:env]},
-    {"int", :read_var_int, []},
-    {"int64", :read_var_int64, []},
-    {"string", :read_string, [:env]},
-    {"uint", :read_var_uint, []},
-    {"uint64", :read_var_uint64, []}
-  ]
-
-  for {type, method, args} <- @primitive_decoders do
-    call =
-      quote do
-        decoder.unquote(method)(unquote_splicing(Enum.map(args, &Macro.var(&1, nil))))
-      end
-
-    def primitive(%{type: unquote(type)}) do
-      unquote(Macro.escape(call))
-    end
-  end
-
+  def primitive(%{type: type}), do: RustExpr.primitive_ast(type)
   def primitive(_field), do: nil
 
   @spec build(map(), map()) :: Macro.t()
