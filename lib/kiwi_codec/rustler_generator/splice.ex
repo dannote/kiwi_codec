@@ -198,45 +198,6 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
         Ok(())
     }
 
-    macro_rules! kiwi_skip_enum_decoder {
-        (fn $name:ident; decoder $decoder:ident;) => {
-            fn $name($decoder: &mut Decoder<'_>) -> NifResult<()> {
-                kiwi_skip_uint_value($decoder)
-            }
-        };
-    }
-
-    macro_rules! kiwi_skip_kind {
-        (one $skip:ident) => { KiwiSkipKind::One($skip) };
-        (repeated $skip:ident) => { KiwiSkipKind::Repeated($skip) };
-        (bytes $skip:ident) => { KiwiSkipKind::Bytes };
-    }
-
-    macro_rules! kiwi_skip_struct_decoder {
-        (fn $name:ident; decoder $decoder:ident; fields [$($field_mode:ident $field_skip:ident;)*]) => {
-            fn $name($decoder: &mut Decoder<'_>) -> NifResult<()> {
-                kiwi_skip_struct_fields($decoder, &[$(kiwi_skip_kind!($field_mode $field_skip),)*])
-            }
-        };
-    }
-
-    macro_rules! kiwi_skip_message_decoder {
-        (
-            fn $name:ident;
-            decoder $decoder:ident;
-            definition $definition_name:literal;
-            fields [$($field_id:literal => $field_mode:ident $field_skip:ident;)*]
-        ) => {
-            fn $name($decoder: &mut Decoder<'_>) -> NifResult<()> {
-                kiwi_skip_message_fields(
-                    $decoder,
-                    $definition_name,
-                    &[$(KiwiSkipField { id: $field_id, kind: kiwi_skip_kind!($field_mode $field_skip) },)*],
-                )
-            }
-        };
-    }
-
     #[allow(unused_macros)]
     macro_rules! kiwi_sparse_enum_decoder {
         (
