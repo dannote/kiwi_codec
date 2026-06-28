@@ -175,6 +175,22 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
         Ok(())
     }
 
+    fn kiwi_skip_message_field(
+        decoder: &mut Decoder<'_>,
+        definition_name: &str,
+        fields: &[KiwiSkipField],
+        field_id: u32,
+    ) -> NifResult<()> {
+        match fields.iter().find(|field| field.id == field_id) {
+            Some(field) => kiwi_skip_kind(decoder, &field.kind),
+            None => Err(Error::Term(Box::new(format!(
+                "unknown field {} while skipping {}",
+                field_id,
+                definition_name
+            )))),
+        }
+    }
+
     fn kiwi_skip_message_fields(
         decoder: &mut Decoder<'_>,
         definition_name: &str,
@@ -183,16 +199,7 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
         loop {
             match decoder.read_var_uint()? {
                 0 => break,
-                field_id => match fields.iter().find(|field| field.id == field_id) {
-                    Some(field) => kiwi_skip_kind(decoder, &field.kind)?,
-                    None => {
-                        return Err(Error::Term(Box::new(format!(
-                            "unknown field {} while skipping {}",
-                            field_id,
-                            definition_name
-                        ))));
-                    }
-                },
+                field_id => kiwi_skip_message_field(decoder, definition_name, fields, field_id)?,
             }
         }
         Ok(())
@@ -232,6 +239,25 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
                     $decoder,
                     $definition_name,
                     &[$(KiwiSkipField { id: $field_id, kind: kiwi_skip_kind!($field_mode $field_skip) },)*],
+                )
+            }
+        };
+    }
+
+    macro_rules! kiwi_skip_message_field_decoder {
+        (
+            fn $name:ident;
+            decoder $decoder:ident;
+            field $field_id:ident;
+            definition $definition_name:literal;
+            fields [$($known_id:literal => $field_mode:ident $field_skip:ident;)*]
+        ) => {
+            fn $name($decoder: &mut Decoder<'_>, $field_id: u32) -> NifResult<()> {
+                kiwi_skip_message_field(
+                    $decoder,
+                    $definition_name,
+                    &[$(KiwiSkipField { id: $known_id, kind: kiwi_skip_kind!($field_mode $field_skip) },)*],
+                    $field_id,
                 )
             }
         };
