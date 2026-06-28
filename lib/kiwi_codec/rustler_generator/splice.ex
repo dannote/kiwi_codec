@@ -11,7 +11,7 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
 
   @spec rustler_helpers(keyword()) :: [RustQ.Rust.Fragment.t()]
   def rustler_helpers(opts \\ []) do
-    decoder_sources = Keyword.get(opts, :decoder_sources, [])
+    decoder_sources = skip_decoder_sources(opts)
 
     decoder_macros(decoder_sources) ++
       RustQ.Rustler.cached_atoms([]) ++
@@ -22,6 +22,16 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
           :make_struct_from_nif_term_arrays
         ]
       )
+  end
+
+  defp skip_decoder_sources(opts) do
+    features = Keyword.get(opts, :features, [:full])
+
+    if :skip in features do
+      Keyword.get(opts, :decoder_sources, [])
+    else
+      []
+    end
   end
 
   defp decoder_macros(decoder_sources) do

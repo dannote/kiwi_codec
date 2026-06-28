@@ -137,6 +137,23 @@ schema decoders, and requested NIF entrypoints. The native crate must provide th
 Kiwi `Decoder` type used by the generated code; by default it is imported from
 `crate::runtime::Decoder`, or pass `decoder: "some::path::Decoder"`.
 
+When generating skip decoders, pass the Rust source file that defines that
+`Decoder` with `decoder_sources:`. KiwiCodec then authors the shared skip value
+helpers with RustQ `defrust`, and RustQ reads the real decoder method signatures
+to infer `?` propagation:
+
+```elixir
+content KiwiCodec.RustlerGenerator.source(schema,
+  features: [:full, :sparse, :skip],
+  entrypoints: {:nif_stubs, MyApp.Native.Nifs},
+  module_prefix: "MyApp.Schema",
+  decoder_sources: ["native/my_nif/src/runtime.rs"]
+)
+```
+
+The option is only used for `:skip` generation. Full and sparse decoders keep the
+compact default helper path when `:skip` is not requested.
+
 For generator internals, especially the compact Rust macro boundary used to keep
 large schemas readable and small, see the Rustler generator architecture guide.
 

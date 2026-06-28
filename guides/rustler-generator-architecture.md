@@ -19,7 +19,10 @@ The generator is organized as a small pipeline:
    Rust macro invocations such as `kiwi_message_decoder!`,
    `kiwi_sparse_message_decoder!`, and `kiwi_skip_message_decoder!`.
 4. `KiwiCodec.RustlerGenerator.Splice` provides the shared Rust macro
-   definitions and helper functions consumed by those invocations.
+   definitions and helper functions consumed by those invocations. When callers
+   opt into `decoder_sources:` for skip generation, shared primitive skip helpers
+   are authored by `KiwiCodec.RustlerGenerator.SkipHelpers` with RustQ `defrust`
+   and source-backed method metadata.
 5. `KiwiCodec.RustlerGenerator.Entrypoint` emits Rustler NIF entrypoints through
    RustQ `defrust`, where the wrapper control flow is small and readable.
 
@@ -39,6 +42,9 @@ When changing full, sparse, or skip decoder generation:
   body would be repetitive.
 - Use RustQ AST for local expression/arm/function generation where it remains
   compact, such as skip field arms used by downstream custom templates.
+- Use `decoder_sources:` to expose the downstream Rust `Decoder` implementation
+  before adding `unwrap!`, verbose propagation `case` expressions, or duplicate
+  method metadata for skip helpers.
 - Do not replace compact decoder macro invocations with fully expanded Rust just
   to say the generator is "AST-backed" or "defrust-backed".
 
@@ -50,11 +56,11 @@ schema output size.
 Figler is the main downstream stress test for generated Rust size. It should be
 used as a private dogfood check, not updated or published automatically.
 
-As of the current generator polish, Figler with local KiwiCodec should generate
-approximately:
+As of the current generator polish, Figler with local KiwiCodec and
+`decoder_sources: ["native/src/runtime.rs"]` should generate approximately:
 
-- `29,383` lines
-- `1,070,917` bytes
+- `29,396` lines
+- `1,070,930` bytes
 
 Small formatting or schema changes can move this slightly, but a large jump
 usually means a compact macro boundary was accidentally expanded.

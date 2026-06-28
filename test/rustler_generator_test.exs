@@ -236,6 +236,25 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     refute generated =~ "fn decode_image_from_decoder<'a>"
   end
 
+  test "ignores decoder source metadata when skip decoders are not requested" do
+    schema_source = """
+    struct Node {
+      uint id;
+    }
+    """
+
+    {generated, _config} =
+      generate_with_rustq_gen!(schema_source,
+        definitions: ["Node"],
+        features: [:full],
+        module_prefix: "Example.Schema",
+        decoder_sources: ["test/fixtures/missing_decoder_runtime.rs"]
+      )
+
+    assert generated =~ "fn decode_node_from_decoder"
+    assert generated =~ "decoder.read_var_uint()?"
+  end
+
   test "uses decoder source metadata for defrust-authored skip helpers" do
     schema_source = """
     message Image {
