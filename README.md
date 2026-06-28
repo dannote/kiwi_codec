@@ -137,6 +137,9 @@ schema decoders, and requested NIF entrypoints. The native crate must provide th
 Kiwi `Decoder` type used by the generated code; by default it is imported from
 `crate::runtime::Decoder`, or pass `decoder: "some::path::Decoder"`.
 
+For generator internals, especially the compact Rust macro boundary used to keep
+large schemas readable and small, see the Rustler generator architecture guide.
+
 ## Containers
 
 ```elixir

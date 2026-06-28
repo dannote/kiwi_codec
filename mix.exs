@@ -64,14 +64,18 @@ defmodule KiwiCodec.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ["lib", "priv", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE*"]
+      files: ["lib", "priv", "guides", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE*"]
     ]
   end
 
   defp docs do
     [
       main: "readme",
-      extras: ["README.md", "CHANGELOG.md"],
+      extras: [
+        "README.md",
+        "CHANGELOG.md",
+        "guides/rustler-generator-architecture.md"
+      ],
       groups_for_modules: docs_groups_for_modules(),
       source_ref: "v#{@version}",
       source_url: @source_url
