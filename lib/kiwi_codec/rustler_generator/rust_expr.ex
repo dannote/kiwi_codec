@@ -9,8 +9,9 @@ defmodule KiwiCodec.RustlerGenerator.RustExpr do
   @spec primitive(KiwiCodec.PrimitiveType.name()) :: String.t() | nil
   def primitive(type) do
     if KiwiCodec.PrimitiveType.name?(type) do
-      ["decoder.", decoder_method_name(type), "(", decoder_args_source(type), ")?"]
-      |> IO.iodata_to_binary()
+      type
+      |> primitive_decoder()
+      |> decoder_call_source()
     end
   end
 
@@ -35,18 +36,19 @@ defmodule KiwiCodec.RustlerGenerator.RustExpr do
     |> Enum.map_join("\n", &(padding <> &1))
   end
 
-  defp decoder_method_name("bool"), do: "read_bool"
-  defp decoder_method_name("byte"), do: "read_byte"
-  defp decoder_method_name("string"), do: "read_string"
-  defp decoder_method_name("float"), do: "read_var_float"
-  defp decoder_method_name(type), do: "read_var_" <> type
+  defp primitive_decoder("bool"), do: {:read_bool, []}
+  defp primitive_decoder("byte"), do: {:read_byte, []}
+  defp primitive_decoder("string"), do: {:read_string, [:env]}
+  defp primitive_decoder("float"), do: {:read_var_float, [:env]}
+  defp primitive_decoder("int"), do: {:read_var_int, []}
+  defp primitive_decoder("int64"), do: {:read_var_int64, []}
+  defp primitive_decoder("uint"), do: {:read_var_uint, []}
+  defp primitive_decoder("uint64"), do: {:read_var_uint64, []}
 
-  defp decoder_args(type) when type in ["float", "string"], do: [:env]
-  defp decoder_args(_type), do: []
-
-  defp decoder_args_source(type) do
-    type
-    |> decoder_args()
-    |> Enum.map_join(", ", &Atom.to_string/1)
+  defp decoder_call_source({method, args}) do
+    ["decoder.", Atom.to_string(method), "(", args_source(args), ")?"]
+    |> IO.iodata_to_binary()
   end
+
+  defp args_source(args), do: Enum.map_join(args, ", ", &Atom.to_string/1)
 end
