@@ -6,6 +6,7 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
   a `__kiwi_module__` key identifying the generated Elixir schema module.
   """
 
+  alias KiwiCodec.RustlerGenerator.DecoderMacro
   alias KiwiCodec.RustlerGenerator.Name
   alias KiwiCodec.RustlerGenerator.RustExpr
   alias KiwiCodec.Schema.Enum, as: SchemaEnum
@@ -26,7 +27,12 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
       |> Enum.map(&field_entry(&1, definition_map))
       |> Enum.intersperse("\n")
 
-    sparse_struct(name, module_prefix, length(fields) + 1, field_entries)
+    DecoderMacro.sparse_struct_decoder(
+      name,
+      module_name(module_prefix, name),
+      length(fields) + 1,
+      field_entries
+    )
   end
 
   defp definition(%SchemaEnum{name: name}, _module_prefix, _definition_map, true) do
@@ -47,25 +53,7 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
          _definition_map,
          false
        ) do
-    variant_entries =
-      variants
-      |> Enum.map(fn field ->
-        [Integer.to_string(field.value), " => ", inspect(Macro.underscore(field.name)), ";"]
-      end)
-      |> Enum.intersperse("\n")
-
-    Rust.item([
-      "kiwi_sparse_enum_decoder! {\n",
-      "    fn decode_sparse_",
-      RustExpr.ident(name),
-      "_from_decoder;\n",
-      "    env env;\n",
-      "    decoder decoder;\n",
-      "    variants [\n",
-      RustExpr.indent(variant_entries, 8),
-      "\n    ]\n",
-      "}"
-    ])
+    DecoderMacro.sparse_enum_decoder(name, variants)
   end
 
   defp definition(%Message{name: name, fields: fields}, module_prefix, definition_map, _full?) do
@@ -76,48 +64,12 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
       end)
       |> Enum.intersperse("\n")
 
-    Rust.item([
-      "kiwi_sparse_message_decoder! {\n",
-      "    fn decode_sparse_",
-      RustExpr.ident(name),
-      "_from_decoder;\n",
-      "    env env;\n",
-      "    decoder decoder;\n",
-      "    module ",
-      inspect(module_name(module_prefix, name)),
-      ";\n",
-      "    definition ",
-      inspect(name),
-      ";\n",
-      "    capacity ",
-      Integer.to_string(length(fields) + 1),
-      ";\n",
-      "    fields [\n",
-      RustExpr.indent(field_entries, 8),
-      "\n    ]\n",
-      "}"
-    ])
-  end
-
-  defp sparse_struct(name, module_prefix, capacity, field_entries) do
-    Rust.item([
-      "kiwi_sparse_struct_decoder! {\n",
-      "    fn decode_sparse_",
-      RustExpr.ident(name),
-      "_from_decoder;\n",
-      "    env env;\n",
-      "    decoder decoder;\n",
-      "    module ",
-      inspect(module_name(module_prefix, name)),
-      ";\n",
-      "    capacity ",
-      Integer.to_string(capacity),
-      ";\n",
-      "    fields [\n",
-      RustExpr.indent(field_entries, 8),
-      "\n    ]\n",
-      "}"
-    ])
+    DecoderMacro.sparse_message_decoder(
+      name,
+      module_name(module_prefix, name),
+      length(fields) + 1,
+      field_entries
+    )
   end
 
   defp field_entry(field, definition_map) do

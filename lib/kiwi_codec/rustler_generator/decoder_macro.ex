@@ -113,6 +113,78 @@ defmodule KiwiCodec.RustlerGenerator.DecoderMacro do
     ])
   end
 
+  @spec sparse_enum_decoder(String.t(), [term()]) :: RustQ.Rust.Fragment.t()
+  def sparse_enum_decoder(name, variants) do
+    variant_entries =
+      variants
+      |> Enum.map(fn field ->
+        [Integer.to_string(field.value), " => ", inspect(Macro.underscore(field.name)), ";"]
+      end)
+      |> Enum.intersperse("\n")
+
+    Rust.item([
+      "kiwi_sparse_enum_decoder! {\n",
+      "    fn decode_sparse_",
+      RustExpr.ident(name),
+      "_from_decoder;\n",
+      "    env env;\n",
+      "    decoder decoder;\n",
+      "    variants [\n",
+      RustExpr.indent(variant_entries, 8),
+      "\n    ]\n",
+      "}"
+    ])
+  end
+
+  @spec sparse_struct_decoder(String.t(), String.t(), pos_integer(), iodata()) ::
+          RustQ.Rust.Fragment.t()
+  def sparse_struct_decoder(name, module_name, capacity, field_entries) do
+    Rust.item([
+      "kiwi_sparse_struct_decoder! {\n",
+      "    fn decode_sparse_",
+      RustExpr.ident(name),
+      "_from_decoder;\n",
+      "    env env;\n",
+      "    decoder decoder;\n",
+      "    module ",
+      inspect(module_name),
+      ";\n",
+      "    capacity ",
+      Integer.to_string(capacity),
+      ";\n",
+      "    fields [\n",
+      RustExpr.indent(field_entries, 8),
+      "\n    ]\n",
+      "}"
+    ])
+  end
+
+  @spec sparse_message_decoder(String.t(), String.t(), pos_integer(), iodata()) ::
+          RustQ.Rust.Fragment.t()
+  def sparse_message_decoder(name, module_name, capacity, field_entries) do
+    Rust.item([
+      "kiwi_sparse_message_decoder! {\n",
+      "    fn decode_sparse_",
+      RustExpr.ident(name),
+      "_from_decoder;\n",
+      "    env env;\n",
+      "    decoder decoder;\n",
+      "    module ",
+      inspect(module_name),
+      ";\n",
+      "    definition ",
+      inspect(name),
+      ";\n",
+      "    capacity ",
+      Integer.to_string(capacity),
+      ";\n",
+      "    fields [\n",
+      RustExpr.indent(field_entries, 8),
+      "\n    ]\n",
+      "}"
+    ])
+  end
+
   defmacro entrypoint(nif_name, decoder_name) do
     nif_name = expand_arg!(nif_name, __CALLER__)
     decoder_name = expand_arg!(decoder_name, __CALLER__)
