@@ -33,25 +33,6 @@ defmodule KiwiCodec.RustlerGenerator.Skip do
     Rust.arm([Integer.to_string(field.id), " => { ", field_expr(field, definition_map), "; },"])
   end
 
-  @spec message_field_decoder(atom() | String.t(), Message.t(), map()) :: RustQ.Rust.Fragment.t()
-  def message_field_decoder(function_name, %Message{name: name, fields: fields}, definition_map) do
-    Rust.item([
-      "kiwi_skip_message_field_decoder! {\n",
-      "    fn ",
-      RustExpr.ident(function_name),
-      ";\n",
-      "    decoder decoder;\n",
-      "    field field_id;\n",
-      "    definition ",
-      inspect(name),
-      ";\n",
-      "    fields [\n",
-      RustExpr.indent(field_entries(fields, definition_map), 8),
-      "\n    ]\n",
-      "}"
-    ])
-  end
-
   defp definition(%SchemaEnum{name: name}, _definition_map) do
     Rust.item([
       "kiwi_skip_enum_decoder! {\n",
@@ -83,6 +64,13 @@ defmodule KiwiCodec.RustlerGenerator.Skip do
   end
 
   defp definition(%Message{name: name, fields: fields}, definition_map) do
+    field_entries =
+      fields
+      |> Enum.map(fn field ->
+        [Integer.to_string(field.id), " => ", field_skip_kind(field, definition_map), ";"]
+      end)
+      |> Enum.intersperse("\n")
+
     Rust.item([
       "kiwi_skip_message_decoder! {\n",
       "    fn skip_",
@@ -93,18 +81,10 @@ defmodule KiwiCodec.RustlerGenerator.Skip do
       inspect(name),
       ";\n",
       "    fields [\n",
-      RustExpr.indent(field_entries(fields, definition_map), 8),
+      RustExpr.indent(field_entries, 8),
       "\n    ]\n",
       "}"
     ])
-  end
-
-  defp field_entries(fields, definition_map) do
-    fields
-    |> Enum.map(fn field ->
-      [Integer.to_string(field.id), " => ", field_skip_kind(field, definition_map), ";"]
-    end)
-    |> Enum.intersperse("\n")
   end
 
   defp field_skip_kind(%{array?: true, type: "byte"}, _definition_map),
