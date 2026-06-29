@@ -356,14 +356,6 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
         };
     }
 
-    type KiwiSparseDecodeFn = for<'a> fn(Env<'a>, &mut Decoder<'_>) -> NifResult<Term<'a>>;
-
-    struct KiwiSparseField {
-        id: u32,
-        name: &'static str,
-        repeated: bool,
-        decode: KiwiSparseDecodeFn,
-    }
     '''
   end
 

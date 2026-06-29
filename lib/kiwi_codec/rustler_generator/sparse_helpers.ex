@@ -26,9 +26,8 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
 
   @spec fragments([Path.t()] | Path.t()) :: [RustQ.Rust.Fragment.t()]
   def fragments(decoder_sources) do
-    decoder_sources
-    |> generated_module!()
-    |> MetaAST.items(@functions)
+    module = generated_module!(decoder_sources)
+    module.__rustq_type_items__() ++ MetaAST.items(module, @functions)
   end
 
   defp generated_module!(decoder_sources) do
@@ -53,6 +52,16 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
       use RustQ.Meta, rust_sources: unquote(decoder_sources)
 
       alias RustQ.Type, as: R
+
+      @type kiwi_sparse_decode_fn ::
+              R.raw(:"for<'a> fn(Env<'a>, &mut Decoder<'_>) -> NifResult<Term<'a>>")
+
+      @type kiwi_sparse_field :: %{
+              required(:id) => R.u32(),
+              required(:name) => R.raw(:"&'static str"),
+              required(:repeated) => R.bool(),
+              required(:decode) => R.path(:KiwiSparseDecodeFn)
+            }
 
       unquote_splicing(value_helper_definitions())
       unquote_splicing(message_helper_definitions())
