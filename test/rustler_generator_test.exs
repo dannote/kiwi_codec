@@ -264,15 +264,16 @@ defmodule KiwiCodec.RustlerGeneratorTest do
     {generated, _config} =
       generate_with_rustq_gen!(schema_source,
         definitions: ["Image"],
-        features: [:sparse],
+        features: [:sparse, :skip],
         sparse_messages: :descriptor,
         module_prefix: "Example.Schema",
         decoder_sources: ["test/fixtures/decoder_runtime.rs"]
       )
 
-    assert generated =~ "macro_rules! kiwi_sparse_message_descriptor_decoder"
-    assert generated =~ "kiwi_sparse_message_descriptor_decoder!"
+    assert generated =~ "macro_rules! kiwi_sparse_skip_message_descriptor_decoder"
+    assert generated =~ "kiwi_sparse_skip_message_descriptor_decoder!"
     refute generated =~ "macro_rules! kiwi_sparse_message_decoder"
+    refute generated =~ "macro_rules! kiwi_skip_message_decoder"
     assert generated =~ "1 => \"hash\": one kiwi_sparse_bytes_value;"
     assert generated =~ "2 => \"name\": one kiwi_sparse_string_value;"
     assert generated =~ "3 => \"origin\": one decode_sparse_point_from_decoder;"

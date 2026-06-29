@@ -107,7 +107,11 @@ defmodule KiwiCodec.RustlerGenerator do
         )
 
       :skip ->
-        Skip.fragments(selected, definition_map, messages?: not shared_sparse_skip?)
+        Skip.fragments(selected, definition_map,
+          messages?: not shared_sparse_skip?,
+          struct_mode:
+            if(Keyword.get(opts, :decoder_sources, []) == [], do: :match, else: :descriptor)
+        )
 
       feature ->
         raise ArgumentError, "unknown Rustler generator feature #{inspect(feature)}"
