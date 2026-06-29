@@ -97,6 +97,8 @@ defmodule KiwiCodec.RustlerGenerator do
       :sparse ->
         Sparse.fragments(selected, module_prefix, definition_map,
           full?: :full in features,
+          struct_mode:
+            if(Keyword.get(opts, :decoder_sources, []) == [], do: :match, else: :descriptor),
           message_mode:
             if(shared_sparse_skip?,
               do: :descriptor_with_skip,

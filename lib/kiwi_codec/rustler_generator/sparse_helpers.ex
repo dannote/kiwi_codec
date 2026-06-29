@@ -11,6 +11,7 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
 
   @macros [
     :kiwi_sparse_enum_decoder,
+    :kiwi_sparse_struct_decoder,
     :kiwi_sparse_message_descriptor_decoder,
     :kiwi_sparse_skip_message_descriptor_decoder
   ]
@@ -27,6 +28,9 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
     :kiwi_sparse_bytes_value,
     :kiwi_sparse_enum_value,
     :kiwi_sparse_field_value,
+    :kiwi_sparse_struct_field_value,
+    :kiwi_sparse_struct_fields,
+    :kiwi_sparse_struct_fields_remaining,
     :kiwi_sparse_message_fields,
     :kiwi_sparse_message_fields_remaining
   ]
@@ -78,6 +82,12 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
               required(:decode) => R.path(:KiwiSparseDecodeFn)
             }
 
+      @type kiwi_sparse_struct_field :: %{
+              required(:name) => R.raw(:"&'static str"),
+              required(:repeated) => R.bool(),
+              required(:decode) => R.path(:KiwiSparseDecodeFn)
+            }
+
       unquote_splicing(macro_definitions())
       unquote_splicing(value_helper_definitions())
       unquote_splicing(message_helper_definitions())
@@ -111,6 +121,45 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
                     struct_literal(KiwiSparseEnumVariant,
                       value: variant_value,
                       name: variant_name
+                    )
+                  end
+                ])
+              )
+            )
+          end
+        end
+      end,
+      quote do
+        defrustmacro kiwi_sparse_struct_decoder(
+                       fn: name(:ident),
+                       env: env(:ident),
+                       decoder: decoder(:ident),
+                       module: module_name(:literal),
+                       capacity: capacity(:literal),
+                       fields:
+                         repeat do
+                           field_name(:literal)
+                           field_mode(:ident)
+                           field_decode(:ident)
+                         end
+                     ) do
+          @spec name(
+                  R.path(:Env, R.lifetime(:a)),
+                  R.mut_ref(R.path(:Decoder, R.lifetime(:_)))
+                ) :: R.nif_result(term())
+          defrust name(env, decoder) do
+            kiwi_sparse_struct_fields(
+              env,
+              decoder,
+              module_name,
+              capacity,
+              ref(
+                array([
+                  repeat fields do
+                    struct_literal(KiwiSparseStructField,
+                      name: field_name,
+                      repeated: kiwi_sparse_repeated!(field_mode),
+                      decode: field_decode
                     )
                   end
                 ])
@@ -272,6 +321,9 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
     [
       quote_enum_value(),
       quote_field_value(),
+      quote_struct_field_value(),
+      quote_struct_fields(),
+      quote_struct_fields_remaining(),
       quote_message_fields(),
       quote_message_fields_remaining()
     ]
@@ -314,6 +366,82 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
           {:ok, values.encode(env)}
         else
           decode(env, decoder)
+        end
+      end
+    end
+  end
+
+  defp quote_struct_field_value do
+    quote do
+      @spec kiwi_sparse_struct_field_value(
+              R.path(:Env, R.lifetime(:a)),
+              R.mut_ref(R.path(:Decoder, R.lifetime(:_))),
+              R.ref(R.path(:KiwiSparseStructField))
+            ) :: R.nif_result(term())
+      defrust kiwi_sparse_struct_field_value(env, decoder, field) do
+        decode = field.decode
+
+        if field.repeated do
+          value = unwrap!(decoder.read_repeated(fn decoder -> decode(env, decoder) end))
+          {:ok, value.encode(env)}
+        else
+          decode(env, decoder)
+        end
+      end
+    end
+  end
+
+  defp quote_struct_fields do
+    quote do
+      @spec kiwi_sparse_struct_fields(
+              R.path(:Env, R.lifetime(:a)),
+              R.mut_ref(R.path(:Decoder, R.lifetime(:_))),
+              R.str(),
+              R.usize(),
+              R.slice(R.path(:KiwiSparseStructField))
+            ) :: R.nif_result(term())
+      defrust kiwi_sparse_struct_fields(env, decoder, module_name, capacity, fields) do
+        module_atom = Atom.from_str(env, module_name).unwrap()
+        module_key_atom = Atom.from_str(env, "__kiwi_module__").unwrap()
+        keys = Vec.with_capacity(capacity)
+        values = Vec.with_capacity(capacity)
+        keys.push(module_key_atom.encode(env))
+        values.push(module_atom.encode(env))
+
+        kiwi_sparse_struct_fields_remaining(
+          env,
+          decoder,
+          fields,
+          0,
+          mut_ref(keys),
+          mut_ref(values)
+        )
+
+        Term.map_from_term_arrays(env, ref(keys), ref(values))
+      end
+    end
+  end
+
+  defp quote_struct_fields_remaining do
+    quote do
+      @spec kiwi_sparse_struct_fields_remaining(
+              R.path(:Env, R.lifetime(:a)),
+              R.mut_ref(R.path(:Decoder, R.lifetime(:_))),
+              R.slice(R.path(:KiwiSparseStructField)),
+              R.usize(),
+              R.mut_ref(R.vec(term())),
+              R.mut_ref(R.vec(term()))
+            ) :: R.nif_result(R.unit())
+      defrust kiwi_sparse_struct_fields_remaining(env, decoder, fields, index, keys, values) do
+        if index == fields.len() do
+          :ok
+        else
+          field = fields.get(index).unwrap()
+          keys.push(Atom.from_str(env, field.name).unwrap().encode(env))
+
+          values.push(unwrap!(kiwi_sparse_struct_field_value(env, decoder, field)))
+
+          kiwi_sparse_struct_fields_remaining(env, decoder, fields, index + 1, keys, values)
         end
       end
     end

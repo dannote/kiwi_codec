@@ -348,7 +348,6 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
 
   defp sparse_decoder_fragments(decoder_sources, shared?) do
     [
-      RustQ.Rust.item(sparse_struct_decoder_macro()),
       sparse_repeated_macro_fragment(),
       SparseHelpers.fragments(decoder_sources, macros: sparse_helper_macros(shared?)),
       RustQ.Rust.item(sparse_message_decoder_macro())
@@ -449,10 +448,18 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
   end
 
   defp sparse_helper_macros(true),
-    do: [:kiwi_sparse_enum_decoder, :kiwi_sparse_skip_message_descriptor_decoder]
+    do: [
+      :kiwi_sparse_enum_decoder,
+      :kiwi_sparse_struct_decoder,
+      :kiwi_sparse_skip_message_descriptor_decoder
+    ]
 
   defp sparse_helper_macros(false),
-    do: [:kiwi_sparse_enum_decoder, :kiwi_sparse_message_descriptor_decoder]
+    do: [
+      :kiwi_sparse_enum_decoder,
+      :kiwi_sparse_struct_decoder,
+      :kiwi_sparse_message_descriptor_decoder
+    ]
 
   defp sparse_descriptor_macros do
     [

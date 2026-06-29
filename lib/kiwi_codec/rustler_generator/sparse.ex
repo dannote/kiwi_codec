@@ -19,9 +19,13 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
         ]
   def fragments(definitions, module_prefix, definition_map, opts \\ []) do
     full? = Keyword.get(opts, :full?, false)
+    struct_mode = Keyword.get(opts, :struct_mode, :match)
     message_mode = Keyword.get(opts, :message_mode, :match)
 
-    Enum.map(definitions, &definition(&1, module_prefix, definition_map, full?, message_mode))
+    Enum.map(
+      definitions,
+      &definition(&1, module_prefix, definition_map, full?, struct_mode, message_mode)
+    )
   end
 
   defp definition(
@@ -29,6 +33,7 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
          module_prefix,
          definition_map,
          _full?,
+         :match,
          _message_mode
        ) do
     field_entries =
@@ -44,7 +49,35 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
     )
   end
 
-  defp definition(%SchemaEnum{name: name}, _module_prefix, _definition_map, true, _message_mode) do
+  defp definition(
+         %Struct{name: name, fields: fields},
+         module_prefix,
+         definition_map,
+         _full?,
+         :descriptor,
+         _message_mode
+       ) do
+    field_entries =
+      fields
+      |> Enum.map(&struct_descriptor_field_entry(&1, definition_map))
+      |> Enum.intersperse("\n")
+
+    DecoderMacro.sparse_struct_descriptor_decoder(
+      name,
+      module_name(module_prefix, name),
+      length(fields) + 1,
+      field_entries
+    )
+  end
+
+  defp definition(
+         %SchemaEnum{name: name},
+         _module_prefix,
+         _definition_map,
+         true,
+         _struct_mode,
+         _message_mode
+       ) do
     Rust.item([
       "fn decode_sparse_",
       RustExpr.ident(name),
@@ -61,6 +94,7 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
          _module_prefix,
          _definition_map,
          false,
+         _struct_mode,
          _message_mode
        ) do
     DecoderMacro.sparse_enum_decoder(name, variants)
@@ -71,6 +105,7 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
          module_prefix,
          definition_map,
          _full?,
+         _struct_mode,
          :match
        ) do
     field_entries =
@@ -93,6 +128,7 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
          module_prefix,
          definition_map,
          _full?,
+         _struct_mode,
          :descriptor_with_skip
        ) do
     field_entries =
@@ -143,6 +179,7 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
          module_prefix,
          definition_map,
          _full?,
+         _struct_mode,
          :descriptor
        ) do
     field_entries =
@@ -174,6 +211,15 @@ defmodule KiwiCodec.RustlerGenerator.Sparse do
     [
       inspect(Macro.underscore(field.name)),
       ": ",
+      descriptor_field_kind(field, definition_map),
+      ";"
+    ]
+  end
+
+  defp struct_descriptor_field_entry(field, definition_map) do
+    [
+      inspect(Macro.underscore(field.name)),
+      " ",
       descriptor_field_kind(field, definition_map),
       ";"
     ]

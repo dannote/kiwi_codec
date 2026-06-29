@@ -160,6 +160,12 @@ defmodule KiwiCodec.RustlerGenerator.DecoderMacro do
     ])
   end
 
+  @spec sparse_struct_descriptor_decoder(String.t(), String.t(), pos_integer(), iodata()) ::
+          RustQ.Rust.Fragment.t()
+  def sparse_struct_descriptor_decoder(name, module_name, capacity, field_entries) do
+    sparse_struct_decoder(name, module_name, capacity, field_entries)
+  end
+
   @spec sparse_message_decoder(String.t(), String.t(), pos_integer(), iodata()) ::
           RustQ.Rust.Fragment.t()
   def sparse_message_decoder(name, module_name, capacity, field_entries) do
