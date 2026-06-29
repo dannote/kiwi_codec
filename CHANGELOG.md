@@ -15,6 +15,8 @@
   when both descriptor sparse and skip features are generated.
 - Compact primitive aliases inside descriptor macro invocations to reduce
   generated Rust source size.
+- Move descriptor-backed skip message scanning into RustQ-authored `defrust`
+  helpers with sorted field lookup.
 - Collapse the separate sparse bytes descriptor mode into ordinary `one`
   descriptor mode.
 

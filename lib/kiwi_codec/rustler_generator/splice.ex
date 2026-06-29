@@ -136,7 +136,7 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
     [
       RustQ.Rust.item(skip_decoder_types()),
       SkipHelpers.fragments(decoder_sources),
-      RustQ.Rust.item(skip_decoder_dispatch())
+      RustQ.Rust.item(skip_decoder_dispatch(message_fields?: false))
     ]
   end
 
@@ -163,7 +163,7 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
       "\n",
       raw_skip_value_helpers(),
       "\n",
-      skip_decoder_dispatch()
+      skip_decoder_dispatch(message_fields?: true)
     ]
   end
 
@@ -221,7 +221,17 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
     '''
   end
 
-  defp skip_decoder_dispatch do
+  defp skip_decoder_dispatch(opts) do
+    message_fields? = Keyword.fetch!(opts, :message_fields?)
+
+    [
+      skip_decoder_dispatch_base(),
+      if(message_fields?, do: skip_message_fields_dispatch(), else: []),
+      skip_decoder_macros()
+    ]
+  end
+
+  defp skip_decoder_dispatch_base do
     ~S'''
     fn kiwi_skip_kind(decoder: &mut Decoder<'_>, kind: &KiwiSkipKind) -> NifResult<()> {
         match kind {
@@ -238,6 +248,11 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
         Ok(())
     }
 
+    '''
+  end
+
+  defp skip_message_fields_dispatch do
+    ~S'''
     fn kiwi_skip_message_fields(
         decoder: &mut Decoder<'_>,
         definition_name: &str,
@@ -260,7 +275,11 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
         }
         Ok(())
     }
+    '''
+  end
 
+  defp skip_decoder_macros do
+    ~S'''
     macro_rules! kiwi_skip_decode {
         (bool) => { kiwi_skip_bool_value };
         (byte) => { kiwi_skip_byte_value };

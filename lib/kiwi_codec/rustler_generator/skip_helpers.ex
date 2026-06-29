@@ -19,7 +19,8 @@ defmodule KiwiCodec.RustlerGenerator.SkipHelpers do
     :kiwi_skip_uint_value,
     :kiwi_skip_uint64_value,
     :kiwi_skip_bytes_value,
-    :kiwi_skip_repeated
+    :kiwi_skip_repeated,
+    :kiwi_skip_message_fields
   ]
 
   @spec fragments([Path.t()] | Path.t()) :: [RustQ.Rust.Fragment.t()]
@@ -120,6 +121,29 @@ defmodule KiwiCodec.RustlerGenerator.SkipHelpers do
       defrust kiwi_skip_repeated(decoder, item) do
         decoder.read_repeated(fn decoder -> item(decoder) end)
         :ok
+      end
+
+      @spec kiwi_skip_message_fields(
+              R.mut_ref(R.path(:Decoder, R.lifetime(:_))),
+              R.str(),
+              R.slice(R.path(:KiwiSkipField))
+            ) :: R.nif_result(R.unit())
+      defrust kiwi_skip_message_fields(decoder, _definition_name, fields) do
+        field_id = unwrap!(decoder.read_var_uint())
+
+        if field_id == 0 do
+          :ok
+        else
+          case fields.binary_search_by_key(ref(field_id), fn field -> field.id end) do
+            {:ok, index} ->
+              field = fields.get(index).unwrap()
+              unwrap!(kiwi_skip_kind(decoder, ref(field.kind)))
+              kiwi_skip_message_fields(decoder, _definition_name, fields)
+
+            {:error, _index} ->
+              {:error, badarg()}
+          end
+        end
       end
     end
   end
