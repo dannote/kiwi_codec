@@ -134,7 +134,6 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
 
   defp skip_decoder_fragments(decoder_sources) do
     [
-      RustQ.Rust.item(skip_decoder_kind_type()),
       SkipHelpers.fragments(decoder_sources),
       RustQ.Rust.item(skip_decoder_dispatch(message_fields?: false))
     ]

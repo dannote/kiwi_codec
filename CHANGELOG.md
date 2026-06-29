@@ -17,8 +17,8 @@
   generated Rust source size.
 - Move descriptor-backed skip message scanning into RustQ-authored `defrust`
   helpers with sorted field lookup.
-- Generate skip descriptor function and field declarations from RustQ type
-  metadata when decoder sources are available.
+- Generate skip descriptor function, enum, and field declarations from RustQ
+  type metadata when decoder sources are available.
 - Collapse the separate sparse bytes descriptor mode into ordinary `one`
   descriptor mode.
 

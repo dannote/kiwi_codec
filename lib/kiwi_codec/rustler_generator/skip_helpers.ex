@@ -55,9 +55,11 @@ defmodule KiwiCodec.RustlerGenerator.SkipHelpers do
 
       @type kiwi_skip_fn :: R.raw(:"fn(&mut Decoder<'_>) -> NifResult<()>")
 
+      @type kiwi_skip_kind :: R.enum(one: [kiwi_skip_fn()], repeated: [kiwi_skip_fn()], bytes: [])
+
       @type kiwi_skip_field :: %{
               required(:id) => R.u32(),
-              required(:kind) => R.raw(:KiwiSkipKind)
+              required(:kind) => kiwi_skip_kind()
             }
 
       @spec kiwi_skip_bool_value(R.mut_ref(R.path(:Decoder, R.lifetime(:_)))) ::
