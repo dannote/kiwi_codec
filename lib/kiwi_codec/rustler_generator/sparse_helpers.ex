@@ -9,6 +9,10 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
 
   alias RustQ.Meta.AST, as: MetaAST
 
+  @macros [
+    :kiwi_sparse_message_descriptor_decoder
+  ]
+
   @functions [
     :kiwi_sparse_bool_value,
     :kiwi_sparse_byte_value,
@@ -27,7 +31,9 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
   @spec fragments([Path.t()] | Path.t()) :: [RustQ.Rust.Fragment.t()]
   def fragments(decoder_sources) do
     module = generated_module!(decoder_sources)
-    module.__rustq_type_items__() ++ MetaAST.items(module, @functions)
+
+    module.__rustq_type_items__() ++
+      MetaAST.macro_items(module, @macros) ++ MetaAST.items(module, @functions)
   end
 
   defp generated_module!(decoder_sources) do
@@ -63,9 +69,58 @@ defmodule KiwiCodec.RustlerGenerator.SparseHelpers do
               required(:decode) => R.path(:KiwiSparseDecodeFn)
             }
 
+      unquote_splicing(macro_definitions())
       unquote_splicing(value_helper_definitions())
       unquote_splicing(message_helper_definitions())
     end
+  end
+
+  defp macro_definitions do
+    [
+      quote do
+        defrustmacro kiwi_sparse_message_descriptor_decoder(
+                       fn: name(:ident),
+                       env: env(:ident),
+                       decoder: decoder(:ident),
+                       module: module_name(:literal),
+                       definition: definition_name(:literal),
+                       capacity: capacity(:literal),
+                       fields:
+                         repeat do
+                           field_id(:literal)
+                           field_name(:literal)
+                           field_mode(:ident)
+                           field_decode(:ident)
+                         end
+                     ) do
+          @spec name(
+                  R.path(:Env, R.lifetime(:a)),
+                  R.mut_ref(R.path(:Decoder, R.lifetime(:_)))
+                ) :: R.nif_result(term())
+          defrust name(env, decoder) do
+            kiwi_sparse_message_fields(
+              env,
+              decoder,
+              module_name,
+              definition_name,
+              capacity,
+              ref(
+                array([
+                  repeat fields do
+                    struct_literal(KiwiSparseField,
+                      id: field_id,
+                      name: field_name,
+                      repeated: kiwi_sparse_repeated!(field_mode),
+                      decode: field_decode
+                    )
+                  end
+                ])
+              )
+            )
+          end
+        end
+      end
+    ]
   end
 
   defp value_helper_definitions do
