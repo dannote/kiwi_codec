@@ -25,9 +25,9 @@ defmodule KiwiCodec.RustlerGenerator.SkipHelpers do
 
   @spec fragments([Path.t()] | Path.t()) :: [RustQ.Rust.Fragment.t()]
   def fragments(decoder_sources) do
-    decoder_sources
-    |> generated_module!()
-    |> MetaAST.items(@functions)
+    module = generated_module!(decoder_sources)
+
+    module.__rustq_type_items__() ++ MetaAST.items(module, @functions)
   end
 
   defp generated_module!(decoder_sources) do
@@ -52,6 +52,13 @@ defmodule KiwiCodec.RustlerGenerator.SkipHelpers do
       use RustQ.Meta, rust_sources: unquote(decoder_sources)
 
       alias RustQ.Type, as: R
+
+      @type kiwi_skip_fn :: R.raw(:"fn(&mut Decoder<'_>) -> NifResult<()>")
+
+      @type kiwi_skip_field :: %{
+              required(:id) => R.u32(),
+              required(:kind) => R.raw(:KiwiSkipKind)
+            }
 
       @spec kiwi_skip_bool_value(R.mut_ref(R.path(:Decoder, R.lifetime(:_)))) ::
               R.nif_result(R.unit())

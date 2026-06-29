@@ -134,25 +134,34 @@ defmodule KiwiCodec.RustlerGenerator.Splice do
 
   defp skip_decoder_fragments(decoder_sources) do
     [
-      RustQ.Rust.item(skip_decoder_types()),
+      RustQ.Rust.item(skip_decoder_kind_type()),
       SkipHelpers.fragments(decoder_sources),
       RustQ.Rust.item(skip_decoder_dispatch(message_fields?: false))
     ]
   end
 
   defp skip_decoder_types do
-    ~S'''
-    type KiwiSkipFn = fn(&mut Decoder<'_>) -> NifResult<()>;
+    [
+      ~S'''
+      type KiwiSkipFn = fn(&mut Decoder<'_>) -> NifResult<()>;
+      ''',
+      skip_decoder_kind_type(),
+      ~S'''
+      struct KiwiSkipField {
+          id: u32,
+          kind: KiwiSkipKind,
+      }
+      '''
+    ]
+  end
 
-    enum KiwiSkipKind {
+  defp skip_decoder_kind_type do
+    ~S'''
+    #[derive(Clone, Debug)]
+    pub enum KiwiSkipKind {
         One(KiwiSkipFn),
         Repeated(KiwiSkipFn),
         Bytes,
-    }
-
-    struct KiwiSkipField {
-        id: u32,
-        kind: KiwiSkipKind,
     }
     '''
   end
